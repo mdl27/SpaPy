@@ -1,2 +1,3 @@
 /venv
-/Examples/Temp
+/Examples/Temp/*
+!*.gitkeep
