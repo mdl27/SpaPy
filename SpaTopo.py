@@ -92,8 +92,8 @@ class SpaTopoTools(SpaPy.SpaTransform):
 
 		GDALDataset = Input1.GDALDataset
 		#GDALDataset = gdal.DEMProcessing('', GDALDataset, format="MEM", projWin = Bounds)
-		gdal.DEMProcessing("./Temp/Test.tif", GDALDataset, 'slope')
-		NewDataset.Load("./Temp/Test.tif")
+		gdal.DEMProcessing("./Examples/Temp/Test.tif", GDALDataset, 'slope')
+		NewDataset.Load("./Examples/Temp/Test.tif")
 
 		#TheBand=Input1.TheBands[0]
 		#x,y = numpy.gradient(TheBand)
@@ -120,8 +120,8 @@ class SpaTopoTools(SpaPy.SpaTransform):
 
 		GDALDataset = Input1.GDALDataset
 		#GDALDataset = gdal.DEMProcessing('', GDALDataset, format="MEM", projWin = Bounds)
-		gdal.DEMProcessing("./Temp/Test.tif", GDALDataset, 'aspect')
-		NewDataset.Load("./Temp/Test.tif")
+		gdal.DEMProcessing("./Examples/Temp/Test.tif", GDALDataset, 'aspect')
+		NewDataset.Load("./Examples/Temp/Test.tif")
 		#TheBand=Input1.TheBands[0]
 		#x,y = numpy.gradient(TheBand)
 		#aspect = numpy.arctan2(-x, y)
@@ -148,8 +148,8 @@ class SpaTopoTools(SpaPy.SpaTransform):
 		NewDataset.CopyPropertiesButNotData(Input1)
 
 		GDALDataset1 = Input1.GDALDataset
-		gdal.DEMProcessing("./Temp/Test.tif", GDALDataset1, Operation)
-		NewDataset.Load("./Temp/Test.tif")
+		gdal.DEMProcessing("./Examples/Temp/Test.tif", GDALDataset1, Operation)
+		NewDataset.Load("./Examples/Temp/Test.tif")
 		NewDataset.NoDataValue=-9999
 		
 		return(NewDataset)

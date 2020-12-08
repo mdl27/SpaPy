@@ -36,7 +36,7 @@ import SpaRasterVectors
 
 RasterFilePath="./Examples/Data/MtStHelens/MtStHelensPreEruptionDEMFloat32.tif"
 
-TempFolderPath="./Temp/"
+TempFolderPath="./Examples/Temp/"
 
 #########################################################################
 # Raster opterations

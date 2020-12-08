@@ -34,7 +34,7 @@ import SpaDensify
 # Paths to files
 CountriesFilePath="./Examples/Data/NaturalEarth/ne_110m_admin_0_countries.shp"
 
-OutputFolderPath="./Temp/"
+OutputFolderPath="./Examples/Temp/"
 
 ############################################################################
 # STLayerVector functions
@@ -96,7 +96,7 @@ while (Index<10):
 	Index+=1
 
 # Save the result
-TheDataset.Save(OutputFolderPath+"Country_First 10 gone.shp") 
+TheDataset.Save(OutputFolderPath+"Country_First10gone.shp") 
 
 #########################################################################
 # Add a new feature

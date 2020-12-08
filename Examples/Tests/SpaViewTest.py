@@ -42,7 +42,7 @@ CountriesFilePath="./Examples/Data/NaturalEarth/ne_110m_admin_0_countries.shp"
 RiversFilePath="./Examples/Data/NaturalEarth/ne_110m_rivers_lake_centerlines.shp"
 CitiesFilePath="./Examples/Data/NaturalEarth/ne_110m_populated_places_simple.shp"
 
-OutputFolderPath="./Temp/"
+OutputFolderPath="./Examples/Temp/"
 
 RasterFilePath="./Examples/Data/MtStHelens/MtStHelensPostEruptionDEMInt16.tif"
 RasterFilePath2="./Examples/Data/MtStHelens/MtStHelensPreEruptionDEMFloat32.tif'"

@@ -34,7 +34,7 @@ import SpaReferencing
 ############################################################################
 CountriesFilePath="./Examples/Data/NaturalEarth/ne_110m_admin_0_countries.shp"
 
-OutputFolderPath="./Temp/"
+OutputFolderPath="./Examples/Temp/"
 
 ############################################################################
 # STLayerVector functions
