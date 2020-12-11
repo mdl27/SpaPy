@@ -1,4 +1,7 @@
 /.eggs
+/build
+/dist
 /Examples/Temp/*
+/SpaPy.egg-info
 /venv
 !*.gitkeep
