@@ -32,7 +32,8 @@ setup(
         'six==1.15.0',
         'numpy==1.19.3',
         'toml==0.10.2',
-        'wrapt==1.12.1'
+        'wrapt==1.12.1',
+        'Cython'
     ],
     setup_requires=['pytest-runner'],
     tests_require=['pytest==4.4.1'],
