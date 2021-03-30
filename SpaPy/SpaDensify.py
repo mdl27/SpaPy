@@ -23,18 +23,19 @@ import math
 
 import shapely
 
-import SpaPy
-import SpaVectors
+#import SpaPy
+from SpaPy import SpaVectors
+from SpaPy import SpaBase
 
 ############################################################################
 # Globals
 ############################################################################
 
-class SpaDensify(SpaPy.SpaTransform):
+class SpaDensify(SpaBase.SpaTransform):
 	""" 
 	Class to manage increasing the density of points in vector data.
 	
-	Inherites from SpaPy.SpaTranform.
+	Inherites from SpaBase.SpaTranform.
 	"""
 
 	def DensifyCoords(self,TheCoords,Amount,Closed=True):
@@ -71,7 +72,7 @@ class SpaDensify(SpaPy.SpaTransform):
 
 			###########################################
 			# densify one line segement
-			Length=SpaPy.GetSegmentLength(X1,Y1,X2,Y2) # find the length of the segment
+			Length=SpaBase.GetSegmentLength(X1,Y1,X2,Y2) # find the length of the segment
 
 			if (Length>0):
 				DX=(X2-X1)/Length*Amount # find the x and y distances along the line that the new points should be spaced
@@ -149,7 +150,8 @@ class SpaDensify(SpaPy.SpaTransform):
 	def Densify(self,TheDataset,Amount):
 		NewDataset=SpaVectors.SpaDatasetVector()
 		NewDataset.CopyMetadata(TheDataset)
-
+		NewDataset.SetType(None)
+		
 		NumFeatures=TheDataset.GetNumFeatures()
 		FeatureIndex=0
 		while (FeatureIndex<NumFeatures): # interate through all the features finding the intersection with the geometry

@@ -3,10 +3,14 @@
 # geometry and attributes (properties in the Fiona & Shapely terms).
 # Basic vector transformations are also supported.
 #
-# The layer contains:
-# - CRS - the coordinate system for the data
+# The dataset contains:
+# - CRS - the coordinate system for the data. TheCRS can be an EPSG code or a Proj parameter string
 # - AttributeDefs - definitions of the attributes (name, datatype, precision)
-# 
+# - Type - the type of vector data.  The following are supported: "Polygon", "Point","LineString","MultiPolygon","MultiPoint","MultiLineString"
+#   Note that the vector functions will only create Point, MultiLineString, and MultiPolygon files
+#   This is because we do not know for many transforms if the final result will be all polygons, all multipolgons or a mix of these.
+#   The current solution is to promote polygon files to MultiPolygon and LineString files to MultiLineString
+#
 # This class uses the open source libraries Fiona for reading and writing
 # shapefiles and Shapely for a number of transformations.
 #
@@ -41,7 +45,7 @@ import shapely
 import math
 
 # SpaPy libraries
-import SpaPy
+from SpaPy import SpaBase
 
 ######################################################################################################
 # Global Definitions
@@ -51,6 +55,13 @@ SPAVECTOR_INTERSECTION=1
 SPAVECTOR_UNION=2
 SPAVECTOR_DIFFERENCE=3
 SPAVECTOR_SYMETRIC_DIFFERENCE=4
+
+SPAVECTOR_TOUCHES=5
+SPAVECTOR_INTERSECTS=6
+SPAVECTOR_DISJOINT=7
+SPAVECTOR_OVERLAPS=8
+SPAVECTOR_CROSSES=9
+SPAVECTOR_CONTAINS=10
 
 ######################################################################################################
 # Private utility functions
@@ -73,11 +84,10 @@ def GetSegmentLength(self,X1,Y1,X2,Y2):
 	Length=math.sqrt(DX*DX+DY*DY)
 	return(Length)
 
-def FixUpInputs(Input1,Input2):
+def _FixUpInputs(Input1,Input2):
 	# What exactly does this tool do?
 	"""
 	Fixes up the inputs for an overlay transform.
-	@private
 	"""
 	NumGeometries=0
 	# if the first input is a geometry and the second is not, switch them
@@ -86,15 +96,15 @@ def FixUpInputs(Input1,Input2):
 		Input1=Input2
 		Input2=Temp
 
-	# if both inputs are a geometry, find the inersection of the geometries and return it
+	# if both inputs are a geometry, find the intersection of the geometries and return it
 	if (isinstance(Input1, shapely.geometry.base.BaseGeometry) and (isinstance(Input1, shapely.geometry.base.BaseGeometry))):
 		NumGeometries=2
 	elif (isinstance(Input2, shapely.geometry.base.BaseGeometry)):
-		Input1=SpaPy.GetInput(Input1)
+		Input1=SpaBase.GetInput(Input1)
 		NumGeometries=1
 	else:
-		Input1=SpaPy.GetInput(Input1)
-		Input2=SpaPy.GetInput(Input2)
+		Input1=SpaBase.GetInput(Input1)
+		Input2=SpaBase.GetInput(Input2)
 
 	return(Input1,Input2,NumGeometries)
 
@@ -112,7 +122,7 @@ class SpaDatasetVector:
 		self.TheAttributes=[]
 
 		self.Driver="ESRI Shapefile"
-		self.Type="Polygon"
+		self.Type=None
 		self.AttributeDefs={}
 
 		# Coordinate reference systems / spatial references can be in either a WKT format or a fiona CRS string.
@@ -132,7 +142,7 @@ class SpaDatasetVector:
 		"""
 		Retrieves the default value for the selected attribute
 
-		parameters:
+		Parameters:
 			Attribute: insert desired attribute here
 		Returns:
 			Default value
@@ -179,10 +189,9 @@ class SpaDatasetVector:
 	############################################################################
 	# Functions to interact with files (shapefiles and CSVs)
 	############################################################################
-	
 	from shapely import speedups
 	speedups.disable()
-	
+
 	def Load(self,FilePath):
 		"""
 		Function to load data from a path
@@ -202,10 +211,13 @@ class SpaDatasetVector:
 
 		GeometryIndex=0
 		for TheFeature in TheShapefile:
-			ShapelyGeometry = shapely.geometry.shape(TheFeature['geometry']) # Converts coordinates to a shapely feature
+			ShapelyGeometry=None
+			if (TheFeature['geometry']!=None):
+				ShapelyGeometry = shapely.geometry.shape(TheFeature['geometry']) # Converts coordinates to a shapely feature
 
 			self.TheGeometries.append(ShapelyGeometry)
 			self.TheAttributes.append(TheFeature['properties'])
+			GeometryIndex+=1
 
 		TheShapefile.close()
 
@@ -237,10 +249,16 @@ class SpaDatasetVector:
 		TheSchema={"geometry":self.Type,"properties":self.AttributeDefs}
 
 		TheCRS=self.CRS
-		if (self.crs_wkt!=None): TheCRS=self.crs_wkt
-		if (isinstance(TheCRS,int)): TheCRS={'init': 'epsg:'+format(TheCRS), 'no_defs': True}
-		#if (self.ProjParameters!=None):
-		#	TheCRS=self.ProjParameters
+		if (isinstance(TheCRS,int)): TheCRS={'init': 'epsg:'+format(TheCRS), 'no_defs': True} # integer must be an EPSG Code
+		elif (self.crs_wkt!=None): TheCRS=self.crs_wkt
+		elif (isinstance(TheCRS,str)):
+			Temp=TheCRS.lower()
+			Index=Temp.find("epsg")
+			if (Index!=-1): # need to pull the EPSG code, otherwise, the string may already be a proj4 string
+				Temp=Temp[Index+5:]
+				TheCRS={'init': 'epsg:'+format(Temp), 'no_defs': True}
+		else: # Should be a spatial reference object
+			TheCRS=TheCRS.to_proj4()
 
 		TheOutput=fiona.open(FilePath,'w',  encoding='utf-8',crs=TheCRS, driver=self.Driver,schema=TheSchema) # jjg - added encoding to remove warning on Natural Earth shapefiles
 
@@ -287,6 +305,9 @@ class SpaDatasetVector:
 		Returns:
 			none
 		"""	
+		if (Type=="Polygon"): Type="MultiPolygon"
+		if (Type=="LineString"): Type="MultiLineString"
+
 		if (len(self.TheGeometries)>0): raise Exception("Sorry, you cannot set the type after a dataset contains data")
 		self.Type=Type
 
@@ -585,6 +606,11 @@ class SpaDatasetVector:
 			TheAttributes=self.TheAttributes[Row]
 			self._AddGeometries(TheGeometry, TheAttributes, NewGeometries, NewAttributes)
 			Row+=1
+
+		# This is one case where we end up with a shapefile composed of individual polygons, points, or linestrings as shapes
+		if (len(NewGeometries)>0): self.Type=NewGeometries[0].geom_type
+
+		# Save the new geometries and attributes as the current ones
 		self.TheGeometries=NewGeometries
 		self.TheAttributes=NewAttributes
 
@@ -625,7 +651,19 @@ class SpaDatasetVector:
 			none
 
 		"""
+
+		if (self.Type==None): 
+			self.SetType(TheGeometry.geom_type)
+
+		# By default, we only support 
+		if (TheGeometry.geom_type!=self.Type): 
+			if (TheGeometry.geom_type=="Polygon"): TheGeometry=shapely.geometry.MultiPolygon([TheGeometry])
+			elif (TheGeometry.geom_type=="LineString"): TheGeometry=shapely.geometry.MultiLineString([TheGeometry])
+			else:
+				raise Exception("The geometry does not match the specified type of "+format(self.Type))
+
 		self.TheGeometries.append(TheGeometry)
+
 		if (TheAttributes==None):
 			TheAttributes={}
 
@@ -760,7 +798,7 @@ class SpaDatasetVector:
 		"""
 		NewLayer=SpaDatasetVector()
 		NewLayer.CopyMetadata(self)
-		NewLayer.Type="Polygon"
+		NewLayer.Type="MultiPolygon"
 
 		NumFeatures=self.GetNumFeatures()
 		FeatureIndex=0
@@ -795,6 +833,7 @@ class SpaDatasetVector:
 		"""
 		NewLayer=SpaDatasetVector()
 		NewLayer.CopyMetadata(self)
+		NewLayer.SetType(None)
 
 		NumFeatures=self.GetNumFeatures()
 		FeatureIndex=0
@@ -808,7 +847,7 @@ class SpaDatasetVector:
 
 	def ConvexHull(self):
 		"""
-		Find the simplest polygon that surounds each feature without having an concave segments.
+		Find the simplest polygon that surounds each feature without having any concave segments.
 
 		Parameters:
 			none
@@ -817,6 +856,7 @@ class SpaDatasetVector:
 		"""
 		NewLayer=SpaDatasetVector()
 		NewLayer.CopyMetadata(self)
+		NewLayer.SetType(None)
 
 		NumFeatures=self.GetNumFeatures()
 		FeatureIndex=0
@@ -954,6 +994,7 @@ class SpaDatasetVector:
 		"""
 		NewDataset=SpaDatasetVector()
 		NewDataset.CopyMetadata(self)
+		NewDataset.SetType(None) # we do not know what the resulting type will be until the first transform is complete
 
 		if (isinstance(TheTarget, shapely.geometry.base.BaseGeometry)): # input is a shapely geometry
 			self.OverlayWithGeometry(TheTarget,TheOperation,NewDataset)
@@ -962,10 +1003,44 @@ class SpaDatasetVector:
 
 		return(NewDataset)
 
+	def OverlayWithSelf(self,TheOperation):
+
+		"""
+		Performs an overlay operation on all of the features in a vector dataset.  This is typically
+		used 
+
+		Parameters:
+			TheOperation: type of operation to be executed 
+		Returns:
+			NewDataset: The SpaDatasetVector object
+		"""
+		NewDataset=SpaDatasetVector()
+		NewDataset.CopyMetadata(self)
+		NewDataset.SetType(None)
+
+		NumFeatures=self.GetNumFeatures()
+
+		if (NumFeatures>0):
+			NewGeometry=self.TheGeometries[0]
+
+			FeatureIndex=1
+			while (FeatureIndex<NumFeatures): # interate through all the features finding the intersection with the geometry
+				TheGeometry=self.TheGeometries[FeatureIndex]
+
+				NewGeometry=self.OverlayGeometryWithGeometry(TheGeometry, NewGeometry,TheOperation)
+
+				FeatureIndex+=1
+
+			# Add the new single feature with the first set of attributes
+			if (NewGeometry!=None) and (NewGeometry.is_empty==False) and (NewGeometry.is_valid):
+				NewDataset.AddFeature(NewGeometry,self.TheAttributes[0])
+
+		return(NewDataset)
+
 	############################################################################
 	# Overlay transform functions
 	############################################################################
-	def Intersection(self,TheTarget):
+	def Intersection(self,TheTarget=None):
 		"""
 		calculates geometric intersection of the target and the SpaDatasetVector object
 
@@ -975,10 +1050,13 @@ class SpaDatasetVector:
 		Returns:
 			New dataset containing only intersected areas of vector datasets 
 		"""
-		NewLayer=self.Overlay(TheTarget,SPAVECTOR_INTERSECTION)
+		if (TheTarget==None):
+			NewLayer=self.OverlayWithSelf(SPAVECTOR_INTERSECTION)
+		else:
+			NewLayer=self.Overlay(TheTarget,SPAVECTOR_INTERSECTION)
 		return(NewLayer)
 
-	def Union(self,TheTarget):
+	def Union(self,TheTarget=None):
 		"""
 		calculates geometric union of the target and the SpaDatasetVector object
 
@@ -986,11 +1064,14 @@ class SpaDatasetVector:
 			TheTarget: input vector object to find intersection with original SpaDatasetVector object
 		Returns:
 			A SpaDatasetVector object
-		"""		
-		NewLayer=self.Overlay(TheTarget,SPAVECTOR_UNION)
+		"""	
+		if (TheTarget==None):
+			NewLayer=self.OverlayWithSelf(SPAVECTOR_UNION)
+		else:
+			NewLayer=self.Overlay(TheTarget,SPAVECTOR_UNION)
 		return(NewLayer)
 
-	def Difference(self,TheTarget):
+	def Difference(self,TheTarget=None):
 		"""
 		calculates difference in values between the target and the SpaDatasetVector object
 
@@ -999,13 +1080,272 @@ class SpaDatasetVector:
 		Returns:
 			A SpaDatasetVector object
 		"""				
-		NewLayer=self.Overlay(TheTarget,SPAVECTOR_DIFFERENCE)
+		if (TheTarget==None):
+			NewLayer=self.OverlayWithSelf(SPAVECTOR_DIFFERENCE)
+		else:
+			NewLayer=self.Overlay(TheTarget,SPAVECTOR_DIFFERENCE)
 		return(NewLayer)
 
-	def SymmetricDifference(self,TheTarget):
-		NewLayer=self.Overlay(TheTarget,SPAVECTOR_SYMETRIC_DIFFERENCE)
+	def SymmetricDifference(self,TheTarget=None):
+		"""
+		calculates symetric difference in values between the target and the SpaDatasetVector object
+
+		Parameters:
+			TheTarget: input vector dataset object to be subtracted from original SpaDatasetVector object
+		Returns:
+			A SpaDatasetVector object
+		"""				
+		if (TheTarget==None):
+			NewLayer=self.OverlayWithSelf(SPAVECTOR_SYMETRIC_DIFFERENCE)
+		else:
+			NewLayer=self.Overlay(TheTarget,SPAVECTOR_SYMETRIC_DIFFERENCE)
 		return(NewLayer)
 
+	############################################################################
+	# Relate transform functions
+	# All these functions operate on the data in this layer but return
+	# new layers
+	############################################################################
+	def RelateGeometryWithGeometry(self,TheGeometry,TheTarget,TheOperation):
+		"""
+		Perform a low-level Relate operation between two geometries
+
+		Parameters:
+			TheGeometry:
+				object geometry OR an SpaDatasetVector object
+			TheTarget: 
+				SpaDatasetVector object
+			TheOperation: 
+				type of operation to be executed (SPAVECTOR_INTERSECTION, SPAVECTOR_UNION, 
+				SPAVECTOR_DIFFERENCE, SPAVECTOR_SYMETRICDIFFERENCE)
+		Returns:
+			A SpaDatasetVector object representint the Relate between TheTarget and TheGeometry
+		"""
+		Result=None
+
+		if (TheGeometry!=None):
+
+			if (TheGeometry.is_valid):
+				if (TheOperation==SPAVECTOR_TOUCHES):
+					Result = TheGeometry.touches(TheTarget)	
+				elif (TheOperation==SPAVECTOR_INTERSECTS):
+					Result = TheGeometry.intersects(TheTarget)	
+				elif (TheOperation==SPAVECTOR_DISJOINT):
+					Result = TheGeometry.disjoint(TheTarget)	
+				elif (TheOperation==SPAVECTOR_OVERLAPS):
+					Result = TheGeometry.overlaps(TheTarget)	
+				elif (TheOperation==SPAVECTOR_CROSSES):
+					Result = TheGeometry.crosses(TheTarget)	
+				elif (TheOperation==SPAVECTOR_CONTAINS):
+					Result = TheGeometry.contains(TheTarget)	
+				else:
+					raise("Sorry, "+TheOperation+" is not supported for Relates")
+			else:
+				Result=None # don't return an invalid geometry
+
+		return(Result)
+
+	def RelateWithGeometry(self,TheTarget,TheOperation,NewDataset):
+
+		"""
+		Performs an Relate operation between SpaDatasetVector object and and TheTarget geometry.  The result
+		will be added to NewDataset.
+
+		Parameters:
+			TheTarget: Object geomerty formatted as a tuple ex: ([(Left,Top), (Right,Top), (Right,Bottom), (Left,Bottom),(Left,Top)])
+			TheOperation: type of operation to be executed 
+			NewDataset: The SpaDatasetVector object
+		Returns:
+			none
+		"""
+		Result=False
+
+		NumFeatures=self.GetNumFeatures()
+		FeatureIndex=0
+		while (FeatureIndex<NumFeatures): # interate through all the features finding the intersection with the geometry
+			TheGeometry=self.TheGeometries[FeatureIndex]
+
+			Flag=self.RelateGeometryWithGeometry(TheGeometry, TheTarget,TheOperation)
+
+			if (Flag): Result=True
+
+			FeatureIndex+=1
+
+		return(Result)
+
+	def RelateWithDataset(self,TheTarget,TheOperation,NewDataset):
+		"""
+		Performs a Relate operation between this dataset and another dataset.
+		Parameters:
+			TheTarget: SpaDatasetVector object to be used in Relate
+			TheOperation: type of operation to be executed 
+			NewDataset: SpaDatasetVector object to be overlaid
+		Returns:
+			A SpaDatasetVector object 
+
+		"""
+		Result=False
+
+		NumFeatures=TheTarget.GetNumFeatures()
+		FeatureIndex=0
+		while (FeatureIndex<NumFeatures): # interate through all the features finding the intersection with the geometry
+			TheGeometry=TheTarget.TheGeometries[FeatureIndex]
+
+			# Relate this geometry with each feature in this dataset
+			Flag = self.RelateWithGeometry(TheGeometry,TheOperation,NewDataset)
+
+			if (Flag): Result=True
+
+			FeatureIndex+=1
+
+		return(Result)
+
+	def Relate(self,TheTarget,TheOperation):
+		"""
+		Relate this dataset with a geometry or another dataset
+
+		Parameters:
+			TheTarget: SpaDatasetVector object
+			TheOperation: type of operation to be executed (Union, intersection, difference, symmetric difference)
+		Returns:
+			A SpaDatasetVector object
+		"""
+		Result=False
+
+		NewDataset=SpaDatasetVector()
+		NewDataset.CopyMetadata(self)
+
+		if (isinstance(TheTarget, shapely.geometry.base.BaseGeometry)): # input is a shapely geometry
+			Result=self.RelateWithGeometry(TheTarget,TheOperation,NewDataset)
+		else:
+			Result=self.RelateWithDataset(TheTarget,TheOperation,NewDataset)
+
+		return(Result)
+
+	def RelateWithSelf(self,TheOperation):
+
+		"""
+		Performs an Relate operation on all of the features in a vector dataset.  This is typically
+		used 
+
+		Parameters:
+			TheOperation: type of operation to be executed 
+		Returns:
+			NewDataset: The SpaDatasetVector object
+		"""
+		Result=False
+
+		NewDataset=SpaDatasetVector()
+		NewDataset.CopyMetadata(self)
+
+		NumFeatures=self.GetNumFeatures()
+		NewGeometry=self.TheGeometries[0]
+
+		FeatureIndex=1
+		while (FeatureIndex<NumFeatures): # interate through all the features finding the intersection with the geometry
+			TheGeometry=self.TheGeometries[FeatureIndex]
+
+			Flag=self.RelateGeometryWithGeometry(TheGeometry, NewGeometry,TheOperation)
+
+			if (Flag): Result=True
+
+			FeatureIndex+=1
+
+		return(Result)
+
+	############################################################################
+	# Relate transform functions
+	############################################################################
+	def Touches(self,TheTarget=None):
+		"""
+		calculates geometric intersection of the target and the SpaDatasetVector object
+
+		Parameters:
+			TheTarget: 
+				input SpaDatasetVector object 
+		Returns:
+			New dataset containing only intersected areas of vector datasets 
+		"""
+		if (TheTarget==None):
+			Flag=self.RelateWithSelf(SPAVECTOR_TOUCHES)
+		else:
+			Flag=self.Relate(TheTarget,SPAVECTOR_TOUCHES)
+		return(Flag)
+
+	def Intersects(self,TheTarget=None):
+		"""
+		calculates geometric union of the target and the SpaDatasetVector object
+
+		Parameters:
+			TheTarget: input vector object to find intersection with original SpaDatasetVector object
+		Returns:
+			A SpaDatasetVector object
+		"""	
+		if (TheTarget==None):
+			Flag=self.RelateWithSelf(SPAVECTOR_INTERSECTS)
+		else:
+			Flag=self.Relate(TheTarget,SPAVECTOR_INTERSECTS)
+		return(Flag)
+
+	def Disjoint(self,TheTarget=None):
+		"""
+		calculates difference in values between the target and the SpaDatasetVector object
+
+		Parameters:
+			TheTarget: input vector dataset object to be subtracted from original SpaDatasetVector object
+		Returns:
+			A SpaDatasetVector object
+		"""				
+		if (TheTarget==None):
+			Flag=self.RelateWithSelf(SPAVECTOR_DISJOINT)
+		else:
+			Flag=self.Relate(TheTarget,SPAVECTOR_DISJOINT)
+		return(Flag)
+
+	def Overlaps(self,TheTarget=None):
+		"""
+		calculates symetric difference in values between the target and the SpaDatasetVector object
+
+		Parameters:
+			TheTarget: input vector dataset object to be subtracted from original SpaDatasetVector object
+		Returns:
+			A SpaDatasetVector object
+		"""				
+		if (TheTarget==None):
+			Flag=self.RelateWithSelf(SPAVECTOR_OVERLAPS)
+		else:
+			Flag=self.Relate(TheTarget,SPAVECTOR_OVERLAPS)
+		return(Flag)
+
+	def Crosses(self,TheTarget=None):
+		"""
+		calculates symetric difference in values between the target and the SpaDatasetVector object
+
+		Parameters:
+			TheTarget: input vector dataset object to be subtracted from original SpaDatasetVector object
+		Returns:
+			A SpaDatasetVector object
+		"""				
+		if (TheTarget==None):
+			Flag=self.RelateWithSelf(SPAVECTOR_CROSSES)
+		else:
+			Flag=self.Relate(TheTarget,SPAVECTOR_CROSSES)
+		return(Flag)
+
+	def Contains(self,TheTarget=None):
+		"""
+		calculates symetric difference in values between the target and the SpaDatasetVector object
+
+		Parameters:
+			TheTarget: input vector dataset object to be subtracted from original SpaDatasetVector object
+		Returns:
+			A SpaDatasetVector object
+		"""				
+		if (TheTarget==None):
+			Flag=self.RelateWithSelf(SPAVECTOR_CONTAINS)
+		else:
+			Flag=self.Relate(TheTarget,SPAVECTOR_CONTAINS)
+		return(Flag)
 ############################################################################
 # Layer for vector data including points, polylines, and polygons
 ############################################################################
@@ -1059,7 +1399,7 @@ class SpaLayerVector:
 					TheCoords=TheGeometry.coords[0]
 					X=TheCoords[0]
 					Y=TheCoords[1]
-					
+
 					TheView.RenderRefEllipse(X,Y,MarkSize)
 
 					FeatureIndex+=1
@@ -1083,6 +1423,13 @@ class SpaLayerVector:
 ######################################################################################################
 # Single line transforms for one layer
 ######################################################################################################
+def Load(InputFile):
+	TheDataset=SpaDatasetVector() #create a new layer
+	TheDataset.Load(InputFile) # load the contents of the layer
+	return(TheDataset)
+######################################################################################################
+# Single line transforms for one layer
+######################################################################################################
 def Buffer(InputFile,BufferDistance):
 	""" 
 	Buffers this dataset by the specified amount and returns a new dataset with the buffered features 
@@ -1098,7 +1445,7 @@ def Buffer(InputFile,BufferDistance):
 	if (isinstance(InputFile, shapely.geometry.base.BaseGeometry)): # input is a shapely geometry
 		Result = InputFile.buffer(BufferDistance)
 	else: # input is another dataset
-		TheInput=SpaPy.GetInput(InputFile)
+		TheInput=SpaBase.GetInput(InputFile)
 		Result =TheInput.Buffer(BufferDistance)
 
 	return(Result)
@@ -1117,7 +1464,7 @@ def Simplify(InputFile,Tolerance,PreserveTopology=True):
 	Returns:
 		New dataset with the simplified data
 	"""
-	Input1=SpaPy.GetInput(InputFile)
+	Input1=SpaBase.GetInput(InputFile)
 	Result=Input1.Simplify(Tolerance,PreserveTopology)
 
 	return(Result)
@@ -1131,7 +1478,7 @@ def ConvexHull(InputFile):
 	Returns:
 		New dataset with the simplified data
 	"""
-	Input1=SpaPy.GetInput(InputFile)
+	Input1=SpaBase.GetInput(InputFile)
 	Result=Input1.ConvexHull()
 
 	return(Result)
@@ -1146,7 +1493,7 @@ def Centroid(InputFile):
 	Returns:
 		New dataset with the centroids of each feature
 	"""
-	Input1=SpaPy.GetInput(InputFile)
+	Input1=SpaBase.GetInput(InputFile)
 	Result=Input1.Centroid()
 
 	return(Result)
@@ -1196,7 +1543,7 @@ def Intersection(Input1,Input2):
 	"""
 	Result=None
 
-	Input1,Input2,NumGeometries=FixUpInputs(Input1,Input2)
+	Input1,Input2,NumGeometries=_FixUpInputs(Input1,Input2)
 
 	if (NumGeometries==2):
 		Result=Input1.intersection(Input2)
@@ -1205,7 +1552,7 @@ def Intersection(Input1,Input2):
 
 	return(Result)
 
-def Union(Input1,Input2):
+def Union(Input1,Input2=None):
 	"""
 	Finds the union (combines area) between two shapefiles.  Since this is a feature-by-feature
 	operation, you'll typically want to shapefiles that each contain one feature.
@@ -1219,8 +1566,8 @@ def Union(Input1,Input2):
 	Returns:
 		New dataset with the union of each feature
 	"""
-	Input1=SpaPy.GetInput(Input1)
-	Input2=SpaPy.GetInput(Input2)
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
 	Result=Input1.Union(Input2)
 
 	return(Result)
@@ -1239,8 +1586,8 @@ def Difference(Input1,Input2):
 	Returns:
 		New dataset with the difference of each feature
 	"""
-	Input1=SpaPy.GetInput(Input1)
-	Input2=SpaPy.GetInput(Input2)
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
 	Result=Input1.Difference(Input2)
 
 	return(Result)
@@ -1259,9 +1606,149 @@ def SymmetricDifference(Input1,Input2):
 	Returns:
 		New dataset with the symetric difference of each feature
 	"""
-	Input1=SpaPy.GetInput(Input1)
-	Input2=SpaPy.GetInput(Input2)
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
 	Result=Input1.SymmetricDifference(Input2)
 
 	return(Result)
 
+######################################################################################################
+# Single line transforms for relationship operations
+######################################################################################################
+def Touches(Input1,Input2):
+	"""
+	Finds the intersection (overlapping area) between two vector datasets.  Since this is a feature-by-feature
+	operation, you'll typically want to use a shapefile with just one feature in it to find it's intersection
+	with the features in the other shapefile.
+
+	Note: Currently only intersections between a multi-feature dataset and a single-feature dataset are supported.
+
+	Parameters:
+		Input1: SpaDatasetVector with geometries
+		Input2: SpaDatasetVector or a shapely geometry 
+
+	Returns:
+		New dataset containing only intersected areas of vector datasets
+	"""
+	Result=None
+
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
+	Result=Input1.Touches(Input2)
+
+	return(Result)
+
+def Intersects(Input1,Input2):
+	"""
+	Finds the intersection (overlapping area) between two vector datasets.  Since this is a feature-by-feature
+	operation, you'll typically want to use a shapefile with just one feature in it to find it's intersection
+	with the features in the other shapefile.
+
+	Note: Currently only intersections between a multi-feature dataset and a single-feature dataset are supported.
+
+	Parameters:
+		Input1: SpaDatasetVector with geometries
+		Input2: SpaDatasetVector or a shapely geometry 
+
+	Returns:
+		New dataset containing only intersected areas of vector datasets
+	"""
+	Result=None
+
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
+	Result=Input1.Intersects(Input2)
+
+	return(Result)
+
+def Disjoint(Input1,Input2):
+	"""
+	Finds the intersection (overlapping area) between two vector datasets.  Since this is a feature-by-feature
+	operation, you'll typically want to use a shapefile with just one feature in it to find it's intersection
+	with the features in the other shapefile.
+
+	Note: Currently only intersections between a multi-feature dataset and a single-feature dataset are supported.
+
+	Parameters:
+		Input1: SpaDatasetVector with geometries
+		Input2: SpaDatasetVector or a shapely geometry 
+
+	Returns:
+		New dataset containing only intersected areas of vector datasets
+	"""
+	Result=None
+
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
+	Result=Input1.Disjoint(Input2)
+
+	return(Result)
+
+def Overlaps(Input1,Input2):
+	"""
+	Finds the intersection (overlapping area) between two vector datasets.  Since this is a feature-by-feature
+	operation, you'll typically want to use a shapefile with just one feature in it to find it's intersection
+	with the features in the other shapefile.
+
+	Note: Currently only intersections between a multi-feature dataset and a single-feature dataset are supported.
+
+	Parameters:
+		Input1: SpaDatasetVector with geometries
+		Input2: SpaDatasetVector or a shapely geometry 
+
+	Returns:
+		New dataset containing only intersected areas of vector datasets
+	"""
+	Result=None
+
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
+	Result=Input1.Overlaps(Input2)
+
+	return(Result)
+
+def Crosses(Input1,Input2):
+	"""
+	Finds the intersection (overlapping area) between two vector datasets.  Since this is a feature-by-feature
+	operation, you'll typically want to use a shapefile with just one feature in it to find it's intersection
+	with the features in the other shapefile.
+
+	Note: Currently only intersections between a multi-feature dataset and a single-feature dataset are supported.
+
+	Parameters:
+		Input1: SpaDatasetVector with geometries
+		Input2: SpaDatasetVector or a shapely geometry 
+
+	Returns:
+		New dataset containing only intersected areas of vector datasets
+	"""
+	Result=None
+
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
+	Result=Input1.Crosses(Input2)
+
+	return(Result)
+
+def Contains(Input1,Input2):
+	"""
+	Finds the intersection (overlapping area) between two vector datasets.  Since this is a feature-by-feature
+	operation, you'll typically want to use a shapefile with just one feature in it to find it's intersection
+	with the features in the other shapefile.
+
+	Note: Currently only intersections between a multi-feature dataset and a single-feature dataset are supported.
+
+	Parameters:
+		Input1: SpaDatasetVector with geometries
+		Input2: SpaDatasetVector or a shapely geometry 
+
+	Returns:
+		New dataset containing only intersected areas of vector datasets
+	"""
+	Result=None
+
+	Input1=SpaBase.GetInput(Input1)
+	if (Input2!=None): Input2=SpaBase.GetInput(Input2)
+	Result=Input1.Contains(Input2)
+
+	return(Result)
