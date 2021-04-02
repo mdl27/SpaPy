@@ -22,19 +22,21 @@ import sys
 # Open source spatial libraries
 import shapely
 import numpy
+sys.path.append(r'C:\\Program Files\\Python39\\Lib\\site-packages\\osgeo')
+sys.path.append(r'../../')
 
 # SpaPy libraries
-sys.path.append(".") 
-import SpaPlot
-import SpaVectors
-import SpaView
-import SpaReferencing
-import SpaDensify
+from SpaPy import SpaPlot
+from SpaPy import SpaVectors
+from SpaPy import SpaView
+from SpaPy import SpaReferencing
+from SpaPy import SpaDensify
 
 # Paths to files
-CountriesFilePath="./Examples/Data/NaturalEarth/ne_110m_admin_0_countries.shp"
+CountriesFilePath="../Data/NaturalEarth/ne_110m_admin_0_countries.shp"
+#CountriesFilePath="C:/Temp/celltowsp.shp"
 
-OutputFolderPath="./Examples/Temp/"
+OutputFolderPath="../Temp/"
 
 ############################################################################
 # STLayerVector functions
@@ -96,7 +98,7 @@ while (Index<10):
 	Index+=1
 
 # Save the result
-TheDataset.Save(OutputFolderPath+"Country_First10gone.shp") 
+TheDataset.Save(OutputFolderPath+"Country_First 10 gone.shp") 
 
 #########################################################################
 # Add a new feature
@@ -111,6 +113,22 @@ TheDataset.AddFeature(TheGeometry)
 
 # Save the result
 TheDataset.Save(OutputFolderPath+"Country_AddedPoly.shp") 
+
+#########################################################################
+# Create a new shapefile
+
+TheDataset=SpaVectors.SpaDatasetVector() #create a new layer
+
+# add a square geometry in at 0,0
+TheGeometry=shapely.geometry.Polygon([(-10,10), (10,10), (10,-10), (-10,-10),(-10,10)])
+
+TheDataset.AddFeature(TheGeometry)
+
+TheDataset.AddAttribute("Name","str",100)
+TheDataset.SetAttributeValue("Name",0,"This is a box")
+
+# Save the result
+TheDataset.Save(OutputFolderPath+"NewBox.shp") 
 
 #########################################################################
 # Remove label ranks <= 2
@@ -189,6 +207,10 @@ NewLayer.Save(OutputFolderPath+"Simplify.shp") # save the output
 NewLayer=TheDataset.Centroid() # 
 NewLayer.Save(OutputFolderPath+"Centroid.shp") # save the output
 
+# Union with self
+NewLayer=TheDataset.Union() # 
+NewLayer.Save(OutputFolderPath+"UnionWithSelf.shp") # save the output
+
 #########################################################################
 # Overlay operations
 
@@ -253,7 +275,7 @@ TheDataset.Load(CountriesFilePath) # load the contents of the layer
 
 NewDataset=SpaDensify.Densify(TheDataset,1) # 
 
-NewLayer=SpaReferencing.Project(CountriesFilePath,Parameters)
+NewLayer=SpaReferencing.Transform(CountriesFilePath,Parameters)
 NewLayer.Save(OutputFolderPath+"Projected.shp")
 
 ############################################################################
@@ -274,6 +296,9 @@ NewLayer.Save(OutputFolderPath+"ConvexHull.shp")
 
 NewLayer=SpaVectors.Simplify(CountriesFilePath,10)
 NewLayer.Save(OutputFolderPath+"Simplify.shp")
+
+NewLayer=SpaVectors.Union(CountriesFilePath)
+NewLayer.Save(OutputFolderPath+"UnionWithSelf.shp")
 
 ############################################################################
 # Overlay operations with a geometry

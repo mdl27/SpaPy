@@ -1,5 +1,5 @@
 ############################################################################
-# Test File for the Spatial (SP) libraries
+# Test File for the Spatial (Spa) libraries
 #
 # Copyright (C) 2020, Humboldt State University, Jim Graham
 #
@@ -24,28 +24,31 @@ import shapely
 import numpy
 
 # Spa Libraries
-sys.path.append(".") 
-import SpaPlot
-import SpaVectors
-import SpaView
-import SpaReferencing
-import SpaDensify
-import SpaRasters
-import SpaTopo
-import SpaRasterMath
+
+from SpaPy import SpaBase
+from SpaPy import SpaPlot
+from SpaPy import SpaVectors
+from SpaPy import SpaView
+from SpaPy import SpaReferencing
+from SpaPy import SpaDensify
+from SpaPy import SpaRasters
+from SpaPy import SpaTopo
 
 ############################################################################
 # Globals
 ############################################################################
 
-CountriesFilePath="./Examples/Data/NaturalEarth/ne_110m_admin_0_countries.shp"
-RiversFilePath="./Examples/Data/NaturalEarth/ne_110m_rivers_lake_centerlines.shp"
-CitiesFilePath="./Examples/Data/NaturalEarth/ne_110m_populated_places_simple.shp"
+CountriesFilePath="../Data/NaturalEarth/ne_110m_admin_0_countries.shp"
+RiversFilePath="../Data/NaturalEarth/ne_110m_rivers_lake_centerlines.shp"
+CitiesFilePath="../Data/NaturalEarth/ne_110m_populated_places_simple.shp"
 
-OutputFolderPath="./Examples/Temp/"
+OutputFolderPath="../Temp/"
 
-RasterFilePath="./Examples/Data/MtStHelens/MtStHelensPostEruptionDEMInt16.tif"
-RasterFilePath2="./Examples/Data/MtStHelens/MtStHelensPreEruptionDEMFloat32.tif'"
+RasterFilePath="../Data/MtStHelens/Mt St Helens Post Eruption DEM Int16.tif"
+#RasterFilePath2="../Data/MtStHelens/Mt St Helens PreEruption DEM Float32.tif"
+
+Path1="../Data/MtStHelens/Mt St Helens PreEruption DEM Float32.tif"
+#Path2="../Data/MtStHelens/Mt St Helens Post Eruption DEM.tif"
 
 ############################################################################
 # SpaView Tests
@@ -79,7 +82,7 @@ def GetViewForDataset(TheDataset,Width,Height,TheGeographicBounds=(-180,-90,180,
 	TheGeographicBounds=GetBoundingPolygon(TheGeographicBounds)
 	TheGeographicBounds=SpaDensify.Densify(TheGeographicBounds,5)
 	
-	TheProjectedBounds=SpaReferencing.Project(TheGeographicBounds,TheDataset.GetCRS())
+	TheProjectedBounds=SpaReferencing.Transform(TheGeographicBounds,4326,TheDataset.GetCRS())
 	TheView.SetFillColor((210,220,250))
 	TheView.RenderRefGeometry(TheProjectedBounds)
 	
@@ -91,7 +94,7 @@ def GetViewForDataset(TheDataset,Width,Height,TheGeographicBounds=(-180,-90,180,
 	return(TheView)
 
 #########################################################################
-# Load the dataset
+# Load the countries dataset
 
 TheDataset=SpaVectors.SpaDatasetVector() #create a new layer
 TheDataset.Load(CountriesFilePath) # load the contents of the layer
@@ -100,7 +103,7 @@ TheDataset.Load(CountriesFilePath) # load the contents of the layer
 # Render a shapefile to a view
 # Simple example to render an existing dataset with a bounding box
 
-if (False):
+if (True):
 	# Create an 800 x 400 pixel view
 	TheView=SpaView.SpaView(800,400)
 	
@@ -120,6 +123,8 @@ if (False):
 	# Render the rivers into the view
 	TheDataset=SpaVectors.SpaDatasetVector() #create a new layer
 	TheDataset.Load(RiversFilePath) # load the contents of the layer
+	#TheView.Render(TheDataset)
+	
 	TheLayer.SetDataset(TheDataset)
 	TheView.SetLineWidth(2)
 	TheView.SetOutlineColor((0,0,255))
@@ -139,69 +144,17 @@ if (False):
 
 	TheView.Show()
 	
-#########################################################################
-# Project a dataset using PROJ parameters
-# Exapmle to project a dataset into AlbersEqualArea using PROJ parmaeters
-# and then show it and save it.
-
-if (False):
-	
-	Parameters={
-		"datum":"WGS84",
-		"proj":"aea",
-		"lat_1":40,
-		"lat_2":60
-	}
-	
-	# Clip the dataset if desired
-	TheDataset=SpaVectors.Clip(CountriesFilePath,-180,-90,180,90)
-	
-	TheDataset=SpaDensify.Densify(TheDataset,5)
-	
-	TheDataset=SpaReferencing.Project(TheDataset,Parameters)
-	
-	TheDataset.Save(OutputFolderPath+"AlbersEqualArea.shp")
-		
-	# Get the view to write out a PNG and display the dataset in a tkinter window
-	TheView=GetViewForDataset(TheDataset,800,800,(-180,-90,180,90))
-	TheView.Save(OutputFolderPath+"AlbersEqualArea.png")
-	TheView.Show()
-	
-#########################################################################
-# Project a dataset to a UTM Zone using PROJ parameters
-# and then save and show the result.
-
-if (False):
-	Parameters={
-		"datum":"WGS84",
-		"proj":"utm",
-		"zone":34,
-	}
-	
-	# Clip the dataset if desired
-	TheDataset=SpaVectors.Clip(CountriesFilePath,-20,-90,60,90)
-	
-	TheDataset=SpaDensify.Densify(TheDataset,5)
-	
-	TheDataset=SpaReferencing.Project(TheDataset,Parameters)
-	
-	TheDataset.Save(OutputFolderPath+"UTMZone34North.shp")
-		
-	# Get the view to write out a PNG and display the dataset in a tkinter window
-	TheView=GetViewForDataset(TheDataset,800,800,(-20,-90,60,90))
-	TheView.Save(OutputFolderPath+"UTMZone34North.png")
-	TheView.Show()
 
 #########################################################################
 # Project a dataset based on a EPSG number
 
-if (False):
+if (True):
 	# Clip the dataset around the valid UTM Zone area
 	TheDataset=SpaVectors.Clip(CountriesFilePath,-160,-90,-90,90)
 	
 	TheDataset=SpaDensify.Densify(TheDataset,5)
 	
-	TheDataset=SpaReferencing.Project(TheDataset,32610) # EPSG Number for UTM Zone 10 North
+	TheDataset=SpaReferencing.Transform(TheDataset,32610) # EPSG Number for UTM Zone 10 North
 	
 	TheDataset.Save(OutputFolderPath+"UTMZone10North.shp")
 		
@@ -213,7 +166,7 @@ if (False):
 #########################################################################
 # Project a dataset based on a EPSG number
 
-if (False):
+if (True):
 
 	TheDataset=SpaRasters.SpaDatasetRaster()
 	TheDataset.Load(RasterFilePath)
@@ -228,47 +181,56 @@ if (False):
 	TheView.Save(OutputFolderPath+"Raster.png")
 	TheView.Show()
 
+#######################################################################
+# find missing area of mt st helens
 
+if (True):
+	import math
+	SpaView.Show(Path1) # deal with no data values
+	
+	TheDataset=SpaRasters.Load(Path1)
+	SpaTopo.Contour(Path1,OutputFilePath=OutputFolderPath+"Countours.shp")
+	
+	TRIDataset=SpaTopo.TRI(Path1)
+	SpaView.Show(TRIDataset) # deal with no data values
+	TRIDataset.Save(OutputFolderPath+"TRI.tif")
+	
+	SlopeDataset=SpaTopo.Slope(TheDataset)
+	SpaView.Show(SlopeDataset)
+	
+	AspectDataset=SpaTopo.Aspect(TheDataset)
+	SpaView.Show(AspectDataset)
+	
+	SteepDataset=SlopeDataset>20
+	SpaView.Show(SteepDataset)
+	
+	GreaterThan90Degrees=AspectDataset>90
+	SpaView.Show(GreaterThan90Degrees)
+	
+	LessThan270Degres=AspectDataset<270
+	SpaView.Show(LessThan270Degres)
+	
+	SouthDataset=SpaRasters.And(GreaterThan90Degrees,LessThan270Degres)
+	SpaView.Show(SouthDataset)
+	
+	NewDataset3=SpaRasters.And(SouthDataset,SteepDataset)
+	SpaView.Show(NewDataset3)
+	
+	# works 
+	NewDataset=SpaTopo.Hillshade(Path1)
+	NewDataset.Save(OutputFolderPath+"Hillshade.tif")
+	SpaView.Show(NewDataset)
 
 
 #######################################################################
-# find missing area of mt st helens
-Path1="./Examples/Data/MtStHelens/MtStHelensPreEruptionDEMFloat32.tif"
-Path2="./Examples/Data/MtStHelens/MtStHelensPostEruptionDEM.tif"
+# show a dataset and a shapefile from a file path
 
-import math
-SpaView.Show(Path1) # deal with no data values
+#TheDataset=SpaVectors.SpaDatasetVector() #create a new layer
+TheDataset=SpaVectors.Load(CountriesFilePath) # load the contents of the layer
 
-TheDataset=SpaRasters.Load(Path1)
+# Show a vector dataset (points)
+SpaView.Show(TheDataset)
 
-SlopeDataset=SpaTopo.Slope(TheDataset)
-SpaView.Show(SlopeDataset)
-
-AspectDataset=SpaTopo.Aspect(TheDataset)
-SpaView.Show(AspectDataset)
-
-SteepDataset=SlopeDataset>20
-SpaView.Show(SteepDataset)
-
-GreaterThan90Degrees=AspectDataset>90
-SpaView.Show(GreaterThan90Degrees)
-
-LessThan270Degres=AspectDataset<270
-SpaView.Show(LessThan270Degres)
-
-SouthDataset=SpaRasterMath.And(GreaterThan90Degrees,LessThan270Degres)
-SpaView.Show(SouthDataset)
-
-NewDataset3=SpaRasterMath.And(SouthDataset,SteepDataset)
-SpaView.Show(NewDataset3)
-
-# works 
-NewDataset=SpaTopo.Hillshade(Path1)
-NewDataset.Save(OutputFolderPath+"Hillshade.tif")
-SpaView.Show(NewDataset)
-
-
-
-
-
+# Show a vector shapefile
+SpaView.Show(CountriesFilePath)
 
