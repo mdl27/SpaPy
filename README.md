@@ -6,12 +6,10 @@ A website with installation instructions and tutorials is available at: <a href=
 
 run:
 
-git clone https://github.com/mdl27/SpaPy.git
+git clone https://github.com/mdl27/SpaPy --branch SpaPy-whl
 
 cd spapy
 
-python -m venv venv
+pip install wheel setuptools # in case they're not installed already
 
-venv\Scripts\activate.bat
-
-pip install -r requirements.txt
+python setup.py bdist_wheel --universal # creates the SpaPy whl file
