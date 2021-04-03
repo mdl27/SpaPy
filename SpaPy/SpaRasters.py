@@ -41,10 +41,10 @@ import numbers
 import math
 
 # Open source spatial libraries
-import gdal
+from osgeo import gdal
 import numpy
 import scipy
-import ogr
+from osgeo import ogr
 import scipy.ndimage
 from osgeo import osr
 

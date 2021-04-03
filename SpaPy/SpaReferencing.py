@@ -41,9 +41,10 @@ import sys
 import pyproj
 import shapely
 import shapely.geometry
-import gdal
+from osgeo import gdal
 from osgeo import osr
 from pyproj import Transformer
+
 # SpaPy libraries
 from SpaPy import SpaVectors 
 from SpaPy import SpaBase

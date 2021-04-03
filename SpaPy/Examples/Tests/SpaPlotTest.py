@@ -23,18 +23,17 @@ import sys
 import shapely
 
 # Spa Libraries
-sys.path.append(".") 
-import SpaPlot
-import SpaVectors
-import SpaView
-import SpaReferencing
+from SpaPy import SpaPlot
+from SpaPy import SpaVectors
+from SpaPy import SpaView
+from SpaPy import SpaReferencing
 
 ############################################################################
 # Globals
 ############################################################################
-CountriesFilePath="./Examples/Data/NaturalEarth/ne_110m_admin_0_countries.shp"
+CountriesFilePath="../Data/NaturalEarth/ne_110m_admin_0_countries.shp"
 
-OutputFolderPath="./Examples/Temp/"
+OutputFolderPath="../Temp/"
 
 ############################################################################
 # STLayerVector functions

@@ -20,30 +20,32 @@
 import sys
 
 # Open source spatial libraries
-import gdal
+from osgeo import gdal
 
 # Spa Libraries
-sys.path.append(".")
-import SpaPlot
-import SpaView
-import SpaRasters
-import SpaTopo
-import SpaRasterVectors
+
+from SpaPy import SpaPlot
+from SpaPy import SpaView
+from SpaPy import SpaRasters
+from SpaPy import SpaTopo
+from SpaPy import SpaRasterVectors
 
 ############################################################################
 # Globals
 ############################################################################
 
-RasterFilePath="./Examples/Data/MtStHelens/MtStHelensPreEruptionDEMFloat32.tif"
+RasterFilePath="../Data/MtStHelens/Mt St Helens PreEruption DEM Float32.tif"
 
-TempFolderPath="./Examples/Temp/"
+RasterFilePath2="../Data/MtStHelens/Mt St Helens Post Eruption DEM Float32.tif"
+
+TempFolderPath="../Temp/"
 
 #########################################################################
 # Raster opterations
 #########################################################################
 
 TheDataset =SpaRasters.SpaDatasetRaster()
-TheDataset.Load(RasterFilePath)
+TheDataset.Load(RasterFilePath2)
 
 print("____________________________________")
 print("Loading Raster: "+RasterFilePath)
@@ -56,21 +58,25 @@ print("Height in pixels: "+format(TheDataset.GetHeightInPixels()))
 
 print("Pixel Type: "+format(TheDataset.GetType()))
 
-print("Projection:".format(TheDataset.GetProjection()))
+#print("CRS:"+format(TheDataset.GetCRS())) # returns a WKT string
 
 TheBounds=TheDataset.GetBounds()
 print("TheBounds="+format(TheBounds))
-Xmin,Ymax = TheDataset.XMin, TheDataset.YMax
-print("TheXmin="+format(Xmin))
-print("TheYmax="+format(Ymax))
 
 TheBand=TheDataset.GetBandInfo(1) # band numbers start at 1
 print("TheBandInfo="+format(TheBand))
+
+MinMax=TheDataset.GetMinMax(0)
+print("Min="+format(MinMax[0])+" Max="+format(MinMax[1]))
+
+Histogram=TheDataset.GetHistogram()
+print("Histogram="+format(Histogram))
 
 # Run this function to execute tests
 #######################################################################
 # Get information on an existing raster and save it to a new name
 
+	
 if (True): #for toggling code on/off for debugging
 
 	TheDataset =SpaRasters.SpaDatasetRaster()
@@ -91,7 +97,7 @@ if (True): #for toggling code on/off for debugging
 
 	print("Pixel Type: "+format(TheDataset.GetType()))
 
-	print("Projection: "+format(TheDataset.GetProjection()))
+	print("Projection: "+format(TheDataset.GetCRS()))
 
 	print("Resolution (x,y): "+format(TheDataset.GetResolution()))
 
@@ -101,13 +107,39 @@ if (True): #for toggling code on/off for debugging
 	TheBandStats=TheDataset.GetBandInfo(1)
 	print("TheBandStats="+format(TheBandStats))
 
-	TheWKT=TheDataset.TheWKT
-	print("TheWKT="+format(TheBandStats))
-
-	#TheBand=TheDataset.GetBandAsArray(1)
-	#print("TheBands: "+format(TheBand))
+	TheBand=TheDataset.GetBand(0)
+	print("TheBands: "+format(TheBand))
 
 	TheDataset.Save(TempFolderPath+"CopiedRaster.tif")
+	
+#######################################################################
+#SpaPlot.PlotRasterHistogram(TheDataset)
+TheDataset=SpaRasters.SpaDatasetRaster()
+TheDataset.Load(RasterFilePath)
+
+TheDataset2=SpaRasters.SpaDatasetRaster()
+TheDataset2.Load(RasterFilePath2)
+
+#SpaPlot.PlotRasterHistogram(TheDataset)
+#SpaPlot.PlotRasterHistogram(TheDataset2)
+
+TheDataset,TheDataset2=SpaRasters.ResampleToMatch(TheDataset,TheDataset2)
+#SpaPlot.PlotRasterHistogram(TheDataset)
+#SpaPlot.PlotRasterHistogram(TheDataset2)
+
+if (False):
+	TheDataset.Save(TempFolderPath+"TheDataset.tif")
+	TheDataset2.Save(TempFolderPath+"TheDataset2.tif")
+	
+	Difference=SpaRasters.Subtract(TheDataset,TheDataset2)
+	Difference.Save(TempFolderPath+"Difference.tif")
+	
+	Difference=TheDataset-TheDataset2
+	Difference.Save(TempFolderPath+"Difference2.tif")
+	
+	SpaView.Show(Difference)
+	SpaPlot.PlotRasterHistogram(Difference)
+
 #######################################################################
 # Test writing out a new raster
 
@@ -137,7 +169,6 @@ if (True):
 	TheDataset.SetResolution(30,30)
 	TheDataset.Save(TempFolderPath+"NewRaster.tif")
 
-
 #######################################################################
 # Transform an existing raster
 
@@ -148,19 +179,29 @@ if (True):
 	NewDataset=TheDataset.Clone()
 	NewDataset.Save(TempFolderPath+"ClonedRaster.tif")
 
+	#SpaPlot.PlotRasterHistogram(NewDataset,"Original Raster")
+
 # Basic Math
 if (True):
 	NewDataset=SpaRasters.Add(TheDataset,10)
 	NewDataset.Save(TempFolderPath+"Raster_Add10.tif")
 
+	#SpaPlot.PlotRasterHistogram(NewDataset,"Original Raster Plus 10")
+	
 	NewDataset=SpaRasters.Subtract(TheDataset,10)
 	NewDataset.Save(TempFolderPath+"Raster_SUBTRACT10.tif")
+
+	#SpaPlot.PlotRasterHistogram(NewDataset,"Original Raster Minus 10")
 
 	NewDataset=SpaRasters.Multiply(TheDataset,10)
 	NewDataset.Save(TempFolderPath+"Raster_MULTIPLY_10.tif")
 
+	#SpaPlot.PlotRasterHistogram(NewDataset,"Original Raster Times 10")
+	
 	NewDataset=SpaRasters.Divide(TheDataset,10)
 	NewDataset.Save(TempFolderPath+"Raster_DIVIDE_10.tif")
+
+	#SpaPlot.PlotRasterHistogram(NewDataset,"Original Raster Divided by 10")
 
 if (True):
 	TheDataset=SpaRasters.SpaDatasetRaster()
@@ -200,11 +241,9 @@ if (True):
 	NewDataset=SpaRasters.Minimum(RasterFilePath, RasterFile2)
 	NewDataset.Save(TempFolderPath + "Minimum.tif")
 
-
-#Test Arthmetic Operator
+#Test Arthmetic Operators
 if (True):
 
-	RasterFile2 = SpaRasters.LessThan(RasterFilePath,5)
 	NewDataset=SpaRasters.Add(RasterFilePath,RasterFile2)
 	NewDataset.Save(TempFolderPath+"Add.tif")
 	NewDataset=SpaRasters.Add(RasterFilePath,2)
@@ -298,7 +337,6 @@ if (True):
 	NewDataset=SpaRasters.AbsoluteValue(RasterFilePath)
 	NewDataset.Save(TempFolderPath + "Abs.tif")
 
-
 # test resampler
 if (True):
 	NewDataset=SpaRasters.Resample(RasterFilePath,0.5)
@@ -312,13 +350,13 @@ if (True):
 #test crop
 if (True):
 	print("*** Performing crop tests")
-	NewDataset=SpaRasters.Crop(RasterFilePath,[543826,4257679,543924,4257589])
+	NewDataset=SpaRasters.Crop(RasterFilePath,[560000,5114000,565000,5119000])
 	NewDataset.Save(TempFolderPath+"Cropped.tif")
 
-	NewDataset=SpaRasters.NumpyCrop(RasterFilePath,[543826,4257679,543924,4257589])
+	NewDataset=SpaRasters.NumpyCrop(RasterFilePath,[560000,5114000,565000,5119000])
 	NewDataset.Save(TempFolderPath+"NumpyCropped.tif")
 
-if (True):
+if (False):
 	print("*** Performing polygonize test")
 	NewDataset=SpaRasterVectors.Polygonize(RasterFilePath)
 	NewDataset.Save(TempFolderPath + "Polygonize.shp")
@@ -334,8 +372,6 @@ if (True):
 
 	NewDataset=SpaTopo.Aspect(RasterFilePath)
 	NewDataset.Save(TempFolderPath+"Aspect.tif")
-
-
 
 print("DONE")
 

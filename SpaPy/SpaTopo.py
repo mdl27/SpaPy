@@ -25,10 +25,10 @@ import math
 # Open source spatial libraries
 import numpy
 import scipy
-import ogr
+from osgeo import ogr
 import scipy.ndimage
 from osgeo import osr
-import gdal
+from osgeo import gdal
 
 # SpaPy libraries
 
