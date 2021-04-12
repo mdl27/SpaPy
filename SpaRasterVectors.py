@@ -21,15 +21,15 @@ import numbers
 import math
 
 # Open source spatial libraries
-import gdal
+from osgeo import gdal
 import numpy
 import scipy
-import ogr
+from osgeo import ogr
 import scipy.ndimage
 from osgeo import osr
 
 # Spa Libraries
-import SpaPy
+from SpaPy import SpaBase
 
 ############################################################################################
 
@@ -43,6 +43,6 @@ def Polygonize(Input1):
     Returns:
     	A RasterDataset
     """	
-    Input1=SpaPy.GetInput(Input1)
+    Input1=SpaBase.GetInput(Input1)
     return(Input1.Polygonize())
 

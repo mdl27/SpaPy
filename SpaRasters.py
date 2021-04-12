@@ -41,17 +41,15 @@ import numbers
 import math
 
 # Open source spatial libraries
-import gdal
+from osgeo import gdal
 import numpy
 import scipy
-import ogr
+from osgeo import ogr
 import scipy.ndimage
 from osgeo import osr
 
 # Spa Libraries
-import SpaPy
-
-from SpaRasterMath import * # required for defines
+from SpaPy import SpaBase
 
 ############################################################################
 # Globals
@@ -64,7 +62,7 @@ class SpaDatasetRaster:
 	Attributes:
 		GDALDataset:
 
-		GDALDataType
+		GDALDataType: See file header for supported types
 
 		WidthInPixels: an integer representing the number of pixels along the x-axis
 
@@ -72,21 +70,20 @@ class SpaDatasetRaster:
 
 		NumBands: an integer representing the number of bands
 
-		NoDataValue:
+		NoDataValue: Value used for transparent pixels when reading and writing data to formats that do not support masks.
 
-		TheMask:
+		TheMask: SpaRaster uses a mask internally to avoid problems with performing math on NoDataValues
 
-		TheBands:
+		TheBands: Array of bands where each entry has a 2D grid of pixel values
 
-		XMin:
+		XMin: typically the x coordinate value for the left-most pixel in the raster
+		YMin: typically the y coordinate value for the bottom pixel in the raster
 
-		YMin:
+		PixelWidth: Width of a pixel in reference units
+		PixelHeight: Height of a pixel in reference units
 
-		PixelWidth
-		PixelHeight
-
-		TheWKT
-		GCS
+		SpatialReference: Spatial reference (CRS)
+		GCS: GCS but not used yet
 		UTMZone
 		UTMSouth
 
@@ -119,9 +116,9 @@ class SpaDatasetRaster:
 		self.PixelHeight=1
 
 		# projection information
-		self.TheWKT=None
+		self.SpatialReference=None
 		self.GCS="WGS84"
-		self.UTMZone=None
+		self.UTMZone=None # if the zone is set, it takes over
 		self.UTMSouth=False
 
 	def CopyPropertiesButNotData(self,RasterDataset):
@@ -151,7 +148,11 @@ class SpaDatasetRaster:
 		self.PixelWidth=RasterDataset.PixelWidth
 		self.PixelHeight=RasterDataset.PixelHeight
 
-		self.TheWKT=RasterDataset.TheWKT
+		self.SpatialReference=None
+		
+		if (RasterDataset.SpatialReference!=None):
+			self.SpatialReference=RasterDataset.SpatialReference.Clone()
+			
 		self.GCS=RasterDataset.GCS
 		self.UTMZone=RasterDataset.UTMZone
 		self.UTMSouth=RasterDataset.UTMSouth
@@ -180,7 +181,7 @@ class SpaDatasetRaster:
 			NewDataset.TheMask=numpy.array(self.TheMask)
 		else:
 			NewDataset.TheMask=None
-			
+
 		return(NewDataset)
 
 	############################################################################
@@ -254,7 +255,7 @@ class SpaDatasetRaster:
 
 	def SetNumBands(self,NumBands): 
 		"""
-		Sets new value for number of bands in provided SpaDatasetRaster
+		Sets new value for number of bands in this SpaDatasetRaster
 
 		Parameters:
 			NumBands: Insert value of desired band amount found in raster
@@ -263,27 +264,51 @@ class SpaDatasetRaster:
 		"""		
 		self.NumBands=NumBands
 
-	def GetProjection(self):
+	def GetCRS(self):
 		"""
-		Retrieves projection of provided SpaDatasetRaster
+		Retrieves coordinate reference system/spatial reference of this SpaDatasetRaster
 
 		Parameters:
 			None
 		Returns:
 			Projection information for provided raster formatted into a list that includes projection, geographic coordinate system, spheroid, etc.
 		"""					
-		return(self.GDALDataset.GetProjection()) # jjg
+		return(self.SpatialReference)
 
+
+	def GetEPSGCode(self):
+		"""
+		Gets the EPSG Code for the current raster if available.
+
+		Parameters:
+			None
+		Returns:
+			EPSG Code for the current raster or None if the code is not available.
+		"""				
+		Result=None
+		if (self.SpatialReference!=None): self.SpatialReference.GetAttrValue("AUTHORITY", 1)
+		return(Result)
+
+	def SetEPSGCode(self,EPSGCode):
+		"""
+		Sets the spatial refrence for the current raster based on an EPSG Code.
+
+		Parameters:
+			EPSG Code as a number or strng
+		"""				
+		srs = osr.SpatialReference()
+		srs.ImportFromEPSG(format(EPSGCode))
+	
 
 	def GetResolution(self):
 		""" 
 		Returns the resolution of the raster as a tuple with (X,Y) 
-		
+
 		Parameters: 
 			none
 		Returns:
 			the resolution of the raster as a tuple with (X,Y)
-	              
+
 		"""
 		return((self.PixelWidth,self.PixelHeight))
 
@@ -299,7 +324,7 @@ class SpaDatasetRaster:
 		if (PixelHeight==None): PixelHeight=PixelWidth
 		self.PixelWidth=PixelWidth
 		self.PixelHeight=PixelHeight
-		
+
 
 	def GetBounds(self):
 		"""
@@ -378,13 +403,13 @@ class SpaDatasetRaster:
 	def SetNorthWestCorner(self,X,Y):
 		""""
 		Sets northwest corner of raster to desired coordinates (x,y)
-	
+
 		Parameters:
 			X= insert desired x-coordinate here
 			Y= insert desired y-coordinate here
 		Returns:
 			a SpaDatasetRaster object
-	
+
 		"""		
 		self.XMin=X 
 		self.YMax=Y
@@ -392,14 +417,14 @@ class SpaDatasetRaster:
 	def GetBand(self,Index):
 		"""
 		Retreive band information for selected band
-		
+
 		Parameters:
 			Index: format as a tuple.
 		Returns:
 			Band information for selected band
-			
+
 		"""
-		if (self.TheBands==None): throw("ERror")
+		if (self.TheBands==None): throw("Error")
 
 		return(self.TheBands[Index])
 
@@ -407,102 +432,204 @@ class SpaDatasetRaster:
 		# Need more information about format of TheBands
 		"""
 		Sets the band values in SpaRaster object equal to those specified
-		
+
 		Parameters:
 			TheBands=desired band values
 		Returns:
 			none
-			
+
 		"""	
 		self.TheBands=TheBands
 
 	def GetBands(self):
 		"""
 		Retreive band information for SpaRaster object
-		
+
 		Parameters:
 			none
 		Returns:
 			Band information for SpaRaster object
-			
+
 		"""		
 		return(self.TheBands)
 
-	def GetMinMax(self,Index):
+	def GetMinMax(self,Index=0):
 		"""
 		Returns the min and max values for the specified band
-		
+
 		Parameters:
 			Index: insert specified band here 
 		Return:
 			Returns a tuple (static list) with the minimum and maximum raster values for the specific band index
 		"""
-		srcband = self.GDALDataset.GetRasterBand(Index)
-		return(srcband.GetMinimum(),srcband.GetMaximum())
+		TheBand=self.TheBands[Index]
+		
+		Min=None
+		Max=None
+		
+		NumRows=len(TheBand)
+		NumColumns=len(TheBand[0])
+		Row=0
+		while (Row<NumRows):
+			TheRow=TheBand[Row]
+			
+			Column=0
+			while (Column<NumColumns):
+				if (self.TheMask is None) or (self.TheMask[Row][Column]!=1):
+					TheValue=TheRow[Column]
+					if (Min==None): 
+						Min=TheValue
+						Max=TheValue
+					else:
+						if (Min>TheValue): Min=TheValue
+						if (Max<TheValue): Max=TheValue
+				Column+=1
+			Row+=1
+						
+		#srcband = self.GDALDataset.GetRasterBand(Index)
+		return(Min,Max)
 
+	#def GetMinMax(self):
+		#"""
+		#Returns the minimum and maximum values for each band in the raster.
+
+		#Returns:
+			#An array with one entry for each band and then a tuple with the min and max values.  An example for a
+			#one band raster would be: [(MinValue,MaxValue)].
+		#"""
+
+		#Result=[]
+
+		#for TheBand in self.TheBands: # add each of the bands from each of the datasets
+			
+			#Min=numpy.amin(TheBand)
+			#Max=numpy.amax(TheBand)
+			
+			#Result.append((Min,Max))
+
+		#return(Result)
+	
 	# Results additional information for each band.
 	# Not sure what to do with this function in the future
 	def GetBandInfo(self,Index):
 		"""
 		Retreive band info from SpaDatasetRaster object for selected band
-		
+
 		Parameters:
 			Index: Input desired band here
 		Returns:
 			Selcted band information for SpaDatasetRaster object
-			
+
 		"""				
 		srcband = self.GDALDataset.GetRasterBand(Index)
 		Result=None
 		if (srcband!=None):
 			Result={
-			    "Scale":srcband.GetScale(),
-			    "UnitType":srcband.GetUnitType(),
-			    "ColorTable":srcband.GetColorTable()
+				"Scale":srcband.GetScale(),
+				"UnitType":srcband.GetUnitType(),
+				"ColorTable":srcband.GetColorTable()
 			}
 		return(Result)
 
 	def GetType(self):
 		"""
 		returns the GDAL types, these are shown in the GetNumPyType() function
-		
+
 		Parameters:
 			none
 		Returns:
 		        SpaDatasetRaster object type information
-			
+
 		"""		
 		return(self.GDALDataType)
 
 	def SetType(self,GDALDataType):
 		"""
-		Set GDAL type for SpaDatasetRaster object
-	
+		Set GDAL type for SpaDatasetRaster object.  If the current raster data does not match the type,
+		the data will be converted to match the specified type.
+
 		Parameters:
 			Desired data type
 		Returns:
 			none
-	
+
 		"""		
 		self.GDALDataType=GDALDataType
-		
+
 		if (self.GDALDataset!=None):
 			self.GDALDataset = gdal.Translate('', GDALDataset, format="MEM",outputType=GDALDataType)
 
 	def GetNoDataValue(self):
+		"""
+		Returns the current NoDataValue that is used for transparent data in the raster.  
+
+		Returns:
+			NoDataValue
+		"""
 		return(self.NoDataValue)
+	
+	def GetHistogram(self,BandIndex=0,NumBins=10):
+		"""
+		Returns a histogram with the specified number of bins
+
+		Parameters:
+		    BandIndex: Index to the desired band or 0 if not specified
+			NumBins: Number of bins in the histogram or 10 if not specified
+			
+		Returns:
+			An array of arrays where each array contains a histogram and then the edges of the bins.
+			See https://numpy.org/doc/stable/reference/generated/numpy.histogram.html
+		"""
+
+		# setup the return value as an array of all zeros
+		Result=[]
+		Index=0
+		while (Index<NumBins):
+			Result.append(0)
+			Index+=1
+			
+		# Get the range of the data in the raster band
+		Min,Max=self.GetMinMax(BandIndex)
+		
+		# Get the width of each bin
+		BinWidth=(Max-Min)/(NumBins)
+		
+		# Go through the data adding 1 to each bin that a pixel falls into
+		TheBand=self.TheBands[BandIndex]
+		
+		NumRows=len(TheBand)
+		NumColumns=len(TheBand[0])
+		Row=0
+		while (Row<NumRows):
+			TheRow=TheBand[Row]
+			
+			Column=0
+			while (Column<NumColumns):
+				if (self.TheMask is None) or (self.TheMask[Row][Column]!=1):
+					TheValue=TheRow[Column]
+					
+					Bin=(TheValue-Min)/BinWidth
+					Bin=int(Bin)
+					if (Bin>=NumBins): Bin=NumBins-1 # the max value will end up with NumBins as the bin
+					
+					Result[Bin]+=1
+					
+				Column+=1
+			Row+=1
+
+		return(Result)
 	############################################################################
 	# Functions to manage spatial references
 	############################################################################
 	def SetUTM(self,Zone,South=False):
 		"""
 		Set SpaDatadetRaster object to UTM zone specified
-	
+
 		Parameters:
 			Zone: insert zone number here
 		Returns:
 			none
-	
+
 		"""		
 		self.UTMZone=Zone
 		self.UTMSouth=South
@@ -538,12 +665,12 @@ class SpaDatasetRaster:
 	def GetNumPyType(self):
 		"""
 		Returns with NumPy Type of SpaDatasetRaster object
-	
+
 		Parameters:
 			none
 		Returns:
 			Numpy Type of SpaDatasetRaster object
-	
+
 		"""				
 		NumPyType=None
 		if (self.GDALDataType==gdal.GDT_Byte): NumPyType="uint8"
@@ -564,7 +691,7 @@ class SpaDatasetRaster:
 			FilePathOrDataset: A SpaDatasetRaster object OR a string representing the path to the raster file
 		Returns:
 			none
-	
+
 		"""				
 		if isinstance(FilePathOrDataset,gdal.Dataset):
 			self.GDALDataset=FilePathOrDataset
@@ -603,10 +730,13 @@ class SpaDatasetRaster:
 			self.PixelWidth=TheGeoTransform[1]
 			self.PixelHeight=TheGeoTransform[5]
 
-			#Thing=self.GDALDataset.GetProjection()
-			self.TheWKT=self.GDALDataset.GetProjectionRef()
-
-
+			# Get the spatial reference
+		#	self.TheWKT=self.GDALDataset.GetProjectionRef()
+			
+			self.SpatialReference=self.GDALDataset.GetSpatialRef()
+			
+			
+			# Load the bands of data
 			self.TheBands =[]
 			Count=0
 			while (Count<self.NumBands):
@@ -625,7 +755,7 @@ class SpaDatasetRaster:
 		TheFilePath - Fill file path with the file extension (tif, jpg, png, or asc)
 		Common file formats include: GTiff, PNG, JPEG, HFA (ERDAS Imagine or img), AAIGrid (Esri ASCII Ggrid)
 		All FileFormats are listed at: https://www.gdal.org/formats_list.html 
-		
+
 		Parameters:
 			TheFilePath: A string representing the path to the folder where file is to be stored
 		Returns:
@@ -651,17 +781,12 @@ class SpaDatasetRaster:
 
 		outRaster = driver.Create(TheFilePath, self.WidthInPixels, self.HeightInPixels, self.NumBands,self.GDALDataType)
 
+		if (outRaster==None): raise Exception("Sorry, there was a problem creating the file at "+TheFilePath)
+		
 		outRaster.SetGeoTransform((self.XMin, self.PixelWidth, 0, self.YMax, 0, self.PixelHeight))
 
 		###########################################
 		#Setup the spatial reference
-		if (self.TheWKT!=None):
-			outRasterSRS = osr.SpatialReference()
-			#outRasterSRS.ImportFromWkt(self.TheWKT)
-			outRasterSRS.SetProjection(self.TheWKT)
-
-			outRaster.SetProjection(self.TheWKT)
-
 		if (self.UTMZone!=None):
 			# setup the spatial reference
 			srs = osr.SpatialReference()
@@ -673,15 +798,22 @@ class SpaDatasetRaster:
 			srs.SetWellKnownGeogCS(self.GCS)
 
 			outRaster.SetProjection(srs.ExportToWkt())
+			
+		elif (self.SpatialReference!=None):
+			#outRasterSRS = self.SpatialReference.Clone()
+			
+			#outRasterSRS.SetProjection(self.TheWKT)
 
-		#write out the data
+			outRaster.SetProjection(self.SpatialReference.ExportToWkt())
 
+		# write out the data
 		Count=0
 		while (Count<self.NumBands):
 			outband = outRaster.GetRasterBand(Count+1)
 
 			TheBand=self.TheBands[Count]
 
+			# Restore the no data values
 			if (self.NoDataValue!=None):
 				outband.SetNoDataValue(self.NoDataValue)
 				TheBand=numpy.where(self.TheMask,self.NoDataValue,TheBand)
@@ -693,13 +825,13 @@ class SpaDatasetRaster:
 	#######################################################################
 	# Transforms
 	def Polygonize(self):
-		import SpaVectors
+		from SpaPy import SpaVectors
 		import shapely.wkt
 		""" 
 		Converts a raster to a polygon feature set.  Each contiguous area of the raster
 		(i.e. ajoining pixels that have the same value) are grouped as one polygon.  The
 		only attribute is "band1" as this only works for one band.
-		
+
 		Parameters:
 			none
 		Returns:
@@ -707,9 +839,9 @@ class SpaDatasetRaster:
 		"""
 		drv = ogr.GetDriverByName("Memory")
 
-		#get spatial reference info
+		# get spatial reference info (jjg - I think we can just clone the SpatialReference)
 		srs = osr.SpatialReference()
-		srs.ImportFromWkt(self.TheWKT)
+		srs.ImportFromWkt(self.SpatialReference.ExportToWkt())
 
 		# Create a temporary data set in memory
 		DestinDataSource = drv.CreateDataSource('out')	
@@ -718,7 +850,7 @@ class SpaDatasetRaster:
 		# add the attribute for the pixel values
 		AttributeType=ogr.OFTInteger
 		if ((self.GDALDataType==gdal.GDT_Float32) or (self.GDALDataType==gdal.GDT_Float64)): AttributeType=ogr.OFSTFloat32;
-		
+
 		FieldDefinition = ogr.FieldDefn("band1", AttributeType)
 		DestinLayer.CreateField(FieldDefinition)
 		AttributeIndex = 0
@@ -732,17 +864,19 @@ class SpaDatasetRaster:
 		OutDataset = SpaVectors.SpaDatasetVector()
 
 		OutDataset.AttributeDefs["band1"]='int:1'
-		
+
 		for feature in DestinLayer:
 			# get the spatial reference and convert to WKT and then convert to a ShapelyGeometry
-			Geometry=feature.GetGeometryRef().ExportToWkt()
+			#ShapelyGeometry=feature.GetGeometryRef().Clone()
+
+			Geometry=feature.GetGeometryRef().ExportToWkt() # This is slow but currently required.  In the future we might support both types and then convert as needed jjg
 			ShapelyGeometry=shapely.wkt.loads(Geometry)
-			
+
 			# setup the attribute array and add the feature to the output dataset
 			Value=feature.GetField(0)
 			if (isinstance(Value,list)): Value=Value[0]
 			Attributes={"band1":Value}
-			
+
 			OutDataset.AddFeature(ShapelyGeometry,Attributes)
 
 		return(OutDataset)
@@ -758,7 +892,6 @@ class SpaDatasetRaster:
 		#srcband=self.GDALDataset.GetRasterBand(1)
 
 	def Math(self,Operation,Input2):
-
 		"""
 		Handles all raster math operations using numPy arrays - called by one-line functions
 
@@ -775,8 +908,11 @@ class SpaDatasetRaster:
 
 		if (isinstance(Input2, numbers.Number)==False): # input is another dataset
 			# jjg - add checks for same number of bands, convertion to save width, height, and data type
-			Input2=SpaPy.GetInput(Input2) # get the input as a dataset
-
+			
+			Input2=SpaBase.GetInput(Input2) # get the input as a dataset
+			
+			if (self.GetNumBands()!=Input2.GetNumBands()): raise Exception("Sorry, the number of bands in the two rasters must match")
+			
 			for TheBand in self.TheBands: # add each of the bands from each of the datasets
 				Band2=Input2.GetBand(BandIndex)
 
@@ -795,14 +931,15 @@ class SpaDatasetRaster:
 				elif (Operation==SPAMATH_MAX): NewBands.append(numpy.maximum(TheBand, Band2))
 				elif (Operation==SPAMATH_MIN): NewBands.append(numpy.minimum(TheBand, Band2))
 
+				# if the operation resulted in a Boolean raster, convert the raster to integer and type it as byte
 				if (Operation==SPAMATH_EQUAL) or (Operation==SPAMATH_NOT_EQUAL) or (Operation==SPAMATH_GREATER) or (Operation==SPAMATH_LESS) or \
 				   (Operation==SPAMATH_GREATER_OR_EQUAL) or (Operation==SPAMATH_LESS_OR_EQUAL) or (Operation==SPAMATH_AND) or (Operation==SPAMATH_OR) or \
 				   (Operation==SPAMATH_MAX) or (Operation==SPAMATH_MIN): 
 					NewBands[BandIndex]=NewBands[BandIndex].astype(int)
 					NewDataset.GDALDataType=gdal.GDT_Byte
-					
+
 				BandIndex+=1
-					
+
 		else: # input is a scalar value ... all unary operators are in here
 			for TheBand in self.TheBands:
 				if (Operation==SPAMATH_ADD): NewBands.append(numpy.add(TheBand,Input2))
@@ -834,12 +971,13 @@ class SpaDatasetRaster:
 				#elif (Operation==SPAMATH_CLIP_TOP): NewBands.append(numpy.clip(TheBand,0,Input2))
 				#elif (Operation==SPAMATH_CLIP_BOTTOM): NewBands.append(numpy.clip(TheBand,Input2,10000))
 
+				# if the operation resulted in a Boolean raster, convert the raster to integer and type it as byte
 				if (Operation==SPAMATH_EQUAL) or (Operation==SPAMATH_NOT_EQUAL) or (Operation==SPAMATH_GREATER) or (Operation==SPAMATH_LESS) or \
 				   (Operation==SPAMATH_GREATER_OR_EQUAL) or (Operation==SPAMATH_LESS_OR_EQUAL) or (Operation==SPAMATH_AND) or (Operation==SPAMATH_OR) or \
 				   (Operation==SPAMATH_MAX) or (Operation==SPAMATH_MIN): 
 					NewBands[BandIndex]=NewBands[BandIndex].astype(int)
 					NewDataset.GDALDataType=gdal.GDT_Byte
-						
+
 				BandIndex+=1
 
 
@@ -852,7 +990,7 @@ class SpaDatasetRaster:
 	def __add__(self, Input2): 
 		"""
 		Performs pixel-wise addition of two rasters OR of one raster and a constant
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster file OR 
 			a constant value as a float
@@ -860,13 +998,13 @@ class SpaDatasetRaster:
 			A SpaDatasetRaster object where the value of each cell is equal to the sum of the values 
 			of the corresponding cells in each of the two inputs
 		"""
-		Input1=SpaPy.GetInput(self)
-		return(Input1.Math(SPMATH_ADD,Input2))
+		Input1=SpaBase.GetInput(self)
+		return(Input1.Math(SPAMATH_ADD,Input2))
 
 	def __sub__(self, Input2): 
 		"""
 		Performs pixel-wise subtraction of two rasters OR of one raster and a constant
-		
+
 		Parameters:
 			Input2:A SpaDatasetRaster object OR a string representing the path to the raster file 
 				OR a constant value as a float
@@ -874,13 +1012,13 @@ class SpaDatasetRaster:
 			A SpaDatasetRaster object where the value of each cell is equal to the difference between 
 			the provided SPRasterDatasetObject and Input2
 		"""		
-		Input1=SpaPy.GetInput(self)
-		return(Input1.Math(SPMATH_SUBTRACT,Input2))
+		Input1=SpaBase.GetInput(self)
+		return(Input1.Math(SPAMATH_SUBTRACT,Input2))
 
 	def __mul__(self, Input2): 
 		"""
 		Performs pixel-wise multiplication of two rasters OR of one raster and a constant
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster file 
 			OR a constant value as a float
@@ -888,13 +1026,13 @@ class SpaDatasetRaster:
 			A SpaDatasetRaster object where the value of each cell is equal to the product of the values of 
 			the corresponding cells in each of the two raster dataset objects
 		"""		
-		Input1=SpaPy.GetInput(self)
-		return(Input1.Math(SPMATH_MULTIPLY,Input2))
+		Input1=SpaBase.GetInput(self)
+		return(Input1.Math(SPAMATH_MULTIPLY,Input2))
 
 	def __truediv__(self, Input2): 
 		"""
 		Performs function for pixel-wise division two rasters OR of one raster and a constant
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster file 
 			OR a constant value as a float
@@ -902,53 +1040,53 @@ class SpaDatasetRaster:
 			A SpaDatasetRaster object where the value of each cell is equal to the quotient 
 			of the values on the corresponding cells
 		"""				
-		Input1=SpaPy.GetInput(self)
-		return(Input1.Math(SPMATH_DIVIDE,Input2))
+		Input1=SpaBase.GetInput(self)
+		return(Input1.Math(SPAMATH_DIVIDE,Input2))
 
 	# Common comparison operators
 	def __lt__(self, Input2): # less than
 		"""
 		Performs  pixel-wise comparison between two rasters OR between one raster and a constant.
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster 
 			file OR a constant value as a float
 		Returns:
 			A SpaDatasetRaster object with values of 1 for cells where self is less than Input2 and 0 for cells where it is not
 		"""				
-		Input1=SpaPy.GetInput(self)
+		Input1=SpaBase.GetInput(self)
 		return(Input1.Math(SPAMATH_LESS,Input2))
 
 	def __le__(self, Input2): # less than or equal
 		"""
 		Performs  pixel-wise comparison between two rasters OR between one raster and a constant.
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster 
 			file OR a constant value as a float
 		Returns:
 			A SpaDatasetRaster object with values of 1 for cells where self is less than or equal to Input2 and 0 for cells where it is not
 		"""		
-		Input1=SpaPy.GetInput(self)
+		Input1=SpaBase.GetInput(self)
 		return(Input1.Math(SPAMATH_LESS_OR_EQUAL,Input2))
 
 	def __eq__(self, Input2): # equal
 		"""
 		Performs  pixel-wise comparison between two rasters OR between one raster and a constant.
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster 
 			file OR a constant value as a float
 		Returns:
 			A SpaDatasetRaster object with values of 1 for cells where self is equal to Input2 and 0 for cells where it is not
 		"""					
-		Input1=SpaPy.GetInput(self)
+		Input1=SpaBase.GetInput(self)
 		return(Input1.Math(SPAMATH_EQUAL,Input2))
 
 	def __ne__(self, Input2): # not equal
 		"""
 		Performs  pixel-wise comparison between two rasters OR between one raster and a constant.
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster 
 			file OR a constant value as a float
@@ -956,13 +1094,13 @@ class SpaDatasetRaster:
 			A SpaDatasetRaster object with values of 1 for cells where self is not equal to Input2
 			and 0 for cells where it is not
 		"""							
-		Input1=SpaPy.GetInput(self)
+		Input1=SpaBase.GetInput(self)
 		return(Input1.Math(SPAMATH_NOT_EQUAL,Input2))
 
 	def __ge__(self, Input2): # greater than or equal
 		"""
 		Performs  pixel-wise comparison between two rasters OR between one raster and a constant.
-		
+
 		Parameters:
 			Input2: A SpaDatasetRaster object OR a string representing the path to the raster 
 			file OR a constant value as a float
@@ -970,13 +1108,13 @@ class SpaDatasetRaster:
 			A SpaDatasetRaster object with values of 1 for cells where self is greater than or equal to 
 			Input2 and 0 for cells where it is not
 		"""			
-		Input1=SpaPy.GetInput(self)
+		Input1=SpaBase.GetInput(self)
 		return(Input1.Math(SPAMATH_GREATER_OR_EQUAL,Input2))
 
 	def __gt__(self, Input2): # greater than
 		"""
 		Performs  pixel-wise comparison between two rasters OR between one raster and a constant.
-		
+
 		Parameters:
 			Input2: 
 			A SpaDatasetRaster object OR a string representing the path to the raster 
@@ -985,7 +1123,7 @@ class SpaDatasetRaster:
 			A SpaDatasetRaster object with values of 1 for cells where self is greater than 
 			Input2 and 0 for cells where it is not
 		"""			
-		Input1=SpaPy.GetInput(self)
+		Input1=SpaBase.GetInput(self)
 		return(Input1.Math(SPAMATH_GREATER,Input2))
 
 	# Common boolean operators (jjg boolean operators cannot be overriden in Python, we have to use And())
@@ -995,10 +1133,10 @@ class SpaDatasetRaster:
 
 		#Parameters:
 			#Input2: SpaDatasetRaster object OR a string representing the path to the raster file OR a boolean consta
-                #Returns:
+		#Returns:
 			#A SpaDatasetRaster object where each cell true if the corresponding cells in both inputs are true. 
 		#"""			
-		#Input1=SpaPy.GetInput(self)
+		#Input1=SpaBase.GetInput(self)
 		#return(Input1.Math(SPAMATH_AND,Input2))
 	#def __or__(self, Input2): # greater than
 		## need more info on function
@@ -1010,10 +1148,10 @@ class SpaDatasetRaster:
 
 		#Returns:
 			#A SpaDatasetRaster object where each cell true if the corresponding cells in either inputs are true. 
-                #"""				
-		#Input1=SpaPy.GetInput(self)
+		#"""				
+		#Input1=SpaBase.GetInput(self)
 		#return(Input1.Math(SPAMATH_OR,Input2))
-	
+
 	#def __inv__(self, Input2): # greater than
 		## need more info
 		#"""
@@ -1023,7 +1161,7 @@ class SpaDatasetRaster:
 		#Returns:
 			#A SpaDatasetRaster object
 		#"""			
-		#Input1=SpaPy.GetInput(self)
+		#Input1=SpaBase.GetInput(self)
 		#return(Input1.Math(SPAMATH_NOT,Input2))
 
 	#######################################################################
@@ -1032,7 +1170,7 @@ class SpaDatasetRaster:
 	def Reclassify(self,InputClasses,OutputClasses,mode):
 		"""
 		Reclassify a raster dataset using numpy
-		
+
 		Parameters:
 			InputClasses: A SpaDatasetRaster object OR a string representing the path to the raster file
 			OutputClasses: A string representing the path to the file where output will be stored
@@ -1082,7 +1220,7 @@ class SpaDatasetRaster:
 # additional core transforms
 #######################################################################
 
-class SpaResample(SpaPy.SpaTransform):
+class SpaResample(SpaBase.SpaTransform):
 	"""
 	Abstract class to define projectors
 	"""
@@ -1090,8 +1228,8 @@ class SpaResample(SpaPy.SpaTransform):
 		super().__init__()
 
 		self.SetSettings(Resample,{
-		    "RowRate":10,
-		    "ColumnRate":10,
+			"RowRate":10,
+			"ColumnRate":10,
 		})
 
 	def Crop(Self,InputRasterDataset,Bounds):
@@ -1102,13 +1240,17 @@ class SpaResample(SpaPy.SpaTransform):
 			Bounds: new extent formatted as [x1,y1,x2,y2] 
 		Return:
 			A cropped SpaRasterDataset object 
-		
+
 		"""
 		NewDataset=SpaDatasetRaster()
 		NewDataset.CopyPropertiesButNotData(InputRasterDataset)
 
 		GDALDataset = InputRasterDataset.GDALDataset
-		GDALDataset = gdal.Translate('', GDALDataset, format="MEM", projWin = Bounds)
+		
+		# Format for the bounds for gdal is [ulx uly lrx lry] which is [xmin,ymax,xmax,ymin]
+		NewBounds=[Bounds[0],Bounds[3],Bounds[2],Bounds[1]] 
+		
+		GDALDataset = gdal.Translate('', GDALDataset, format="MEM", projWin = NewBounds)
 		NewDataset.Load(GDALDataset)
 		GDALDataset = None
 		return(NewDataset)
@@ -1126,9 +1268,9 @@ class SpaResample(SpaPy.SpaTransform):
 		NewDataset.CopyPropertiesButNotData(InputRasterDataset)
 
 		UpperLeftRefX=Bounds[0]
-		UpperLeftRefY=Bounds[1]
+		UpperLeftRefY=Bounds[3]
 		LowerRightRefX=Bounds[2]
-		LowerRightRefY=Bounds[3]
+		LowerRightRefY=Bounds[1]
 
 		UpperLeftPixelX=InputRasterDataset.GetPixelXFromRefX(UpperLeftRefX)
 		UpperLeftPixelY=InputRasterDataset.GetPixelYFromRefY(UpperLeftRefY)
@@ -1151,7 +1293,7 @@ class SpaResample(SpaPy.SpaTransform):
 		"""
 		#check to see if input is a str or a SpaDatasetRaster object
 
-		InputRasterDataset = SpaPy.GetInput(InputRasterDataset)
+		InputRasterDataset = SpaBase.GetInput(InputRasterDataset)
 
 		OutputDataset=SpaDatasetRaster()
 		OutputDataset.CopyPropertiesButNotData(InputRasterDataset)
@@ -1188,17 +1330,18 @@ class SpaResample(SpaPy.SpaTransform):
 
 		TheMask = InputRasterDataset.TheMask
 		if (TheMask is not None):
-			OutputMask = scipy.ndimage.zoom(TheMask,ZoomFactor,output=None,order=order,mode='constant',cval=0.0,prefilter=True)
+			OutputMask = scipy.ndimage.zoom(TheMask,ZoomFactor,order=1,mode='nearest') # Must be order=1 for boolean values
+#			OutputMask = scipy.ndimage.zoom(TheMask,ZoomFactor,output=None,order=order,cval=0.0,prefilter=True)
 			OutputDataset.TheMask=OutputMask
 		else: 
 			OutputDataset.TheMask=None
-		
+
 		return(OutputDataset)
 
 	def ExtractByPixels(self,InputRasterDataset,StartColumn,StartRow,EndColumn,EndRow):
 		"""
 		Extracts a portion of the raster image using pixel locations.
-		
+
 		Parameters:
 			InputRasterDataset: 
 				A SpaDatasetRaster object OR a string representing the path to the raster file
@@ -1249,7 +1392,7 @@ class SpaResample(SpaPy.SpaTransform):
 		Creates a sampled version of the specified raster
 		This uses NumPy arrays with Python to sample pixel by
 		pixel and is really slow.
-		
+
 		Parameters:
 			InputRasterDataset: 
 				A SpaDatasetRaster object OR a string representing the path to the raster file
@@ -1258,7 +1401,7 @@ class SpaResample(SpaPy.SpaTransform):
 		"""
 		#check to see if input is a str or a SpaDatasetRaster object
 
-		InputRasterDataset = SpaPy.GetInput(InputRasterDataset)
+		InputRasterDataset = SpaBase.GetInput(InputRasterDataset)
 
 		OutputDataset=SpaDatasetRaster()
 		OutputDataset.CopyPropertiesButNotData(InputRasterDataset)
@@ -1358,8 +1501,8 @@ class SpaResample(SpaPy.SpaTransform):
 # One-line functions
 ############################################################################################
 def Load(Path1):
-	
-	TheDataset=SpaRasters.SpaDatasetRaster()
+
+	TheDataset=SpaDatasetRaster()
 	TheDataset.Load(Path1)
 	return(TheDataset)
 
@@ -1376,8 +1519,8 @@ def Resample(Input1, ZoomFactor):
 		A SpaDatasetRaster object resampled to the given parameters
 
 	"""
-	Input1=SpaPy.GetInput(Input1)
-	TheResampler=SpaRasters.SpaResample()
+	Input1=SpaBase.GetInput(Input1)
+	TheResampler=SpaResample()
 	return(TheResampler.Scale(Input1, ZoomFactor))
 
 def ReclassifyDiscrete(Input1,InputClasses,OutputClasses):
@@ -1388,18 +1531,18 @@ def ReclassifyDiscrete(Input1,InputClasses,OutputClasses):
 		Input1: SpaDatasetRaster object OR a string representing the path to the raster file
 
 		Input classes: A discrete set of values ex:(10,20,30)
-		
+
 		Output classes: The desired classes ex:(1,2,3)
 
 	Returns:
 		A SpaDatasetRaster object
 
 	"""	
-	Input1=SpaPy.GetInput(Input1)
+	Input1=SpaBase.GetInput(Input1)
 	return(Input1.Reclassify(InputClasses,OutputClasses,"discrete"))
 
 def ReclassifyRange(Input1,InputClasses,OutputClasses):
-	
+
 	"""
 	Resamples a raster into classes which represent a range of values
 
@@ -1407,42 +1550,616 @@ def ReclassifyRange(Input1,InputClasses,OutputClasses):
 		Input1: SpaDatasetRaster object OR a string representing the path to the raster file
 
 		Input classes: the range of values to be reclassified ex:[(-1000,1),(1,3),(3,10000)]
-		
+
 		Output classes: The desired classes  ex:(1,2,3)
 	Returns:
 		A SpaDatasetRaster object
 
 	"""		
-	Input1=SpaPy.GetInput(Input1)
+	Input1=SpaBase.GetInput(Input1)
 	return(Input1.Reclassify(InputClasses,OutputClasses,"range"))
 
 def Crop(Input1,Bounds):
 	"""
 	Crops a raster to a specified extent using gdal.Translate()
-	
+
 	Parameters:
 		Input1: SpaDatasetRaster object OR a string representing the path to the raster file
-		
+
 		Bounds: The desired extent formatted as [x1,y1,x2,y2]
 	Returns:
 		A SpaDatasetRaster object
 	"""
-	Input1=SpaPy.GetInput(Input1)
-	TheResampler=SpaRasters.SpaResample()
+	Input1=SpaBase.GetInput(Input1)
+	TheResampler=SpaResample()
 	return(TheResampler.Crop(Input1,Bounds))
 
 def NumpyCrop(Input1,Bounds):
 	"""
 	Crops a raster to a specified extent without using gdal
-	
+
 	Parameters:
 		Input1: SpaDatasetRaster object OR a string representing the path to the raster file
-		
+
 		Bounds: The desired extent formatted as [x1,y1,x2,y2]
 	Returns:
 		A SpaDatasetRaster object
 	"""
-	Input1=SpaPy.GetInput(Input1)
-	TheResampler=SpaRasters.SpaResample()
+	Input1=SpaBase.GetInput(Input1)
+	TheResampler=SpaResample()
 	return(TheResampler.NumpyCrop(Input1,Bounds))
 
+############################################################################
+# Constants
+############################################################################
+# Basic Arithmatic
+SPAMATH_ADD=1
+SPAMATH_SUBTRACT=2
+SPAMATH_MULTIPLY=3
+SPAMATH_DIVIDE=4
+
+# Rounding
+SPAMATH_ROUND=100
+SPAMATH_ROUND_INTEGER=101
+SPAMATH_ROUND_FIX=102
+SPAMATH_ROUND_FLOOR=103
+SPAMATH_ROUND_CEIL=104
+SPAMATH_ROUND_TRUNC=105
+
+# Logical
+SPAMATH_AND=201
+SPAMATH_OR=202
+SPAMATH_NOT=203
+SPAMATH_LESS=204
+SPAMATH_LESS_OR_EQUAL=205
+SPAMATH_EQUAL=206
+SPAMATH_NOT_EQUAL=207
+SPAMATH_GREATER=208
+SPAMATH_GREATER_OR_EQUAL=209
+
+# Othermath
+SPAMATH_NATURAL_LOG=300
+SPAMATH_LOG=301
+SPAMATH_EXPONENT=302
+SPAMATH_SQUARE=303
+SPAMATH_SQUARE_ROOT=304
+SPAMATH_ABSOLUTE=305
+SPAMATH_MAX=306
+SPAMATH_MIN=307
+SPAMATH_POWER=309
+SPAMATH_CLIP_TOP=308
+SPAMATH_CLIP_BOTTOM=309
+# Trig
+
+#######################################################################
+# one line raster transforms
+#######################################################################
+
+#######################################################################
+# Basic math
+def Add(Input1,Input2):
+	"""
+	Performs pixel-wise addition of two rasters OR of one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object where the value of each cell is equal to the sum of the values of the corresponding cells in each of the two inputs.
+	"""
+	#allows for parameters to be in any order
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1 #switches the values of Input1 and Input2
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ADD,Input2))
+
+def Subtract(Input1,Input2):
+	"""
+	One-line function for pixel-wise subtraction of two rasters OR of one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object where the value of each cell is equal to the difference of the values of the corresponding cells in each of the two inputs.
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1 
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_SUBTRACT,Input2))
+
+def Multiply(Input1,Input2):
+	"""
+	One-line function for pixel-wise multiplication of two rasters OR of one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object where the value of each cell is equal to the product of the values of the corresponding cells in each of the two inputs.
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_MULTIPLY,Input2))
+
+def Divide(Input1,Input2):
+	"""
+	One-line function for pixel-wise division two rasters OR of one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object where the value of each cell is equal to the quotient of the values on the corresponding cells in each of the two inputs.
+	"""
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_DIVIDE,Input2))
+
+
+#######################################################################
+# Logical
+def Equal(Input1,Input2):
+	"""
+	One-line function for pixel-wise comparison between two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object with values of 1 for cells where Input1 is equal to Input2 and 0 for cells where it is not.
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_EQUAL,Input2))
+
+def NotEqual(Input1,Input2):
+	"""
+	One-line function for pixel-wise comparison of two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object with values of 1 for cells where Input1 is not equal to Input2 and 0 for cells where it is.
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1    
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_NOT_EQUAL,Input2))
+
+
+def LessThan(Input1,Input2):
+	"""
+	One-line function for pixel-wise comparison of two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object with values of 1 for cells where Input1 is less than Input2 and 0 for cells where it is not.
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1 
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_LESS,Input2))
+
+def GreaterThan(Input1,Input2):
+	"""
+	One-line function for pixel-wise comparison of two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object with values of 1 for cells where Input1 is greater than Input2 and 0 for cells where it is not
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_GREATER,Input2))
+
+def LessThanOrEqual(Input1,Input2):
+	"""
+	One-line function for pixel-wise comparison of two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object with values of 1 for cells where Input1 is less than or equal to Input2 and 0 for cells where it is not.
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_LESS_OR_EQUAL,Input2))
+
+def GreaterThanOrEqual(Input1,Input2):
+	"""
+	One-line function for pixel-wise comparison of two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object with values of 1 for cells where Input1 is greater than or equal to Input2 and 0 for cells where it is not.
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_GREATER_OR_EQUAL,Input2))
+
+
+def Maximum(Input1, Input2):
+	"""
+	One-line function for pixel-wise comparison of two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: A SpaDatasetRaster object OR a string represening the path to the raster file.
+
+		Input2: Same as above OR a constant value as an integer or a float.
+
+	Returns
+		A SpaDatasetRaster object where each cell is equal to the greater value of the corresponding cells in each of the two inputs
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1    
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_MAX,Input2))
+
+def Minimum(Input1, Input2):
+	"""
+	One-line function for pixel-wise comparison of two rasters OR between one raster and a constant. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+		Input2: SpaDatasetRaster object OR a string representing the path to the raster file OR a number as a float.
+
+	Returns
+		A SpaDatasetRaster object where each cell is equal to lesser of the corresponding cells in each of the two inputs
+	"""	
+	if isinstance(Input1,(int,float)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_MIN,Input2))
+
+def And(Input1,Input2):
+	"""
+	One-line function for logical operation between two boolean rasters OR between one boolean raster and a constant boolean value. The order of the parameters does not matter.
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+		Input2: Same as above, or a boolean or an int.
+
+	Returns
+		A SpaDatasetRaster object where each cell true if the corresponding cells in both inputs are true. 
+	"""	
+	if isinstance(Input1,(bool,int)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_AND,Input2))
+
+def Or(Input1,Input2):
+	"""
+	One-line function for logical operation between two boolean rasters OR between one boolean raster and a constant boolean value. The order of the parameters does not matter.
+
+	Parameters:
+	    Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+		Input2: Same as above, or a boolean or an int.
+
+	Returns
+		A SpaDatasetRaster object where each cell true if the corresponding cells in either inputs are true. 
+	"""	
+	if isinstance(Input1,(bool,int)):
+		Input1, Input2 = Input2, Input1
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_OR,Input2))
+
+def Not(Input1):
+	"""
+	One-line function for logical operation between two boolean rasters OR between one boolean raster and a constant boolean value. The order of the parameters does not matter.
+
+	Parameters:
+	    Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+		Input2: Same as above, or a boolean or an int.
+
+	Returns
+		A SpaDatasetRaster object where each cell has the opposite value of the input. 
+	"""	  
+
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_NOT,0))
+
+
+#######################################################################
+# Rounding
+def Round(Input1, Precision):
+	"""
+	One-line function for rounding a raster to a specified precision.
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+		Precision: An integer representing the number of decimal places to be rounded too (dafualt = 0)
+	Returns
+		A SpaDatasetRaster object where each cell has been rounded to the specified degree of precision.
+	"""		
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ROUND, Precision))
+
+def RoundInteger(Input1):
+	"""
+	One-line function for rounding a raster. 
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object where each cell has been rounded to the nearest integer.
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ROUND_INTEGER,0))
+
+def RoundFix(Input1):
+	"""
+	One-line function for rounding a raster 
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object where each cell has been rounded to the nearest integer torwards zero.
+	"""		
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ROUND_FIX,0))
+def RoundFloor(Input1):
+	"""
+	One-line function for rounding a raster 
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object where each cell has been rounded to the nearest integer less than or equal to the input.
+	"""		
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ROUND_FLOOR,0))
+def RoundCeiling(Input1):
+	"""
+	One-line function for rounding a raster 
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object where each cell has been rounded to the nearest integer greater than or equal to the input.
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ROUND_CEIL,0))
+def Truncate(Input1):
+	"""
+	One-line function for rounding a raster 
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object where the decimal portion of the input has been discarded	
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ROUND_TRUNC,0))
+
+#######################################################################
+#Unary Math
+
+def NaturalLog(Input1):
+	"""
+	Computes the natural logarithm of a raster.
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_NATURAL_LOG,0))
+
+def Log(Input1):
+	"""
+	Computes the base ten logarithm of a raster.
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_NATURAL_LOG,0))
+
+def Exponential(Input1):
+	"""
+	Computes the exponential of a raster.
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_EXPONENT,0))
+
+def Power(Input1, Power):
+	"""
+	Raises the raster to the specified power.
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+		Power: The power to be raised to, as a float (or integer)
+
+	Returns
+		A SpaDatasetRaster object
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_POWER, Power))
+
+def Square(Input1):
+	"""
+	Computes the square of a raster
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns
+		A SpaDatasetRaster object
+	"""
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_SQUARE,0))
+
+def SquareRoot(Input1):
+	"""
+	Computes the square root of a raster
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns:
+		A SpaDatasetRaster object
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_SQUARE_ROOT,0))
+
+def AbsoluteValue(Input1):
+	"""
+	Computes the absolute value of a raster
+
+	Parameters:
+		Input1: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns:
+		A SpaDatasetRaster object
+	"""	
+	Input1=SpaBase.GetInput(Input1)
+	return(Input1.Math(SPAMATH_ABSOLUTE,0))
+####################################################################
+# Public utility functions
+####################################################################
+def ResampleToMatch(TheDataset1,TheDataset2):
+	"""
+	Resamples the specified datasets to create rasters that have the same pixel and
+	reference bounds as each other.  This function is typically used to prepare rasters
+	for raster math.  The bounds will be the area of overlap of the two rasters while 
+	the pixel dimensions will be the lower resolution of the two.
+
+	Parameters:
+		TheDataset1: SpaDatasetRaster object OR a string representing the path to the raster file.
+		TheDataset2: SpaDatasetRaster object OR a string representing the path to the raster file.
+
+	Returns:
+		A tuple with two SpaDatasetRaster objects ordered as (NewData1,NewData2)
+	"""
+	TheDataset1=SpaBase.GetInput(TheDataset1)
+	TheDataset2=SpaBase.GetInput(TheDataset2)
+	
+	Resolution1=TheDataset1.GetResolution()
+	TheBounds1=TheDataset1.GetBounds()  
+	
+	#TheDataset2=SpaRasters.SpaDatasetRaster()  
+	#TheDataset2.Load(RasterFilePath2)      
+	
+	Resolution2=TheDataset2.GetResolution()
+	TheBounds2=TheDataset2.GetBounds()  
+	
+	# make sure the two rasters represent the same spatial area
+	if (TheBounds1!=TheBounds2):
+		XMin=TheBounds1[0]
+		YMin=TheBounds1[1]
+		XMax=TheBounds1[2]
+		YMax=TheBounds1[3]
+		
+		if (TheBounds2[0]>XMin): XMin=TheBounds2[0]
+		if (TheBounds2[1]>YMin): YMin=TheBounds2[1]
+		if (TheBounds2[2]<XMax): XMax=TheBounds2[2]
+		if (TheBounds2[3]<YMax): YMax=TheBounds2[3]
+		
+		TheBounds=[XMin,YMin,XMax,YMax]
+		
+		TheDataset1=Crop(TheDataset1,TheBounds)
+		TheDataset2=Crop(TheDataset2,TheBounds)
+		
+		#print("Width in pixels: "+format(TheDataset1.GetWidthInPixels())) 
+		#print("Height in pixels: "+format(TheDataset1.GetHeightInPixels())) 
+		
+		#print("Width in pixels: "+format(TheDataset2.GetWidthInPixels())) 
+		#print("Height in pixels: "+format(TheDataset2.GetHeightInPixels())) 
+		
+	# Make sure the rasters have the same resolution
+	Resolution1=Resolution1[0]
+	Resolution2=Resolution2[0]
+	
+	if (Resolution1<Resolution2): 
+		TheDataset2=Resample(TheDataset2,Resolution2/Resolution1)
+	elif (Resolution1>Resolution2): 
+		TheDataset1=Resample(TheDataset1,Resolution1/Resolution2)
+	
+	# Make sure the masks only cover areas that are masked in both rasters
+	if (TheDataset1.TheMask is not None):
+		if (TheDataset2.TheMask is not None): # both have masks, combine them
+			
+			TheDataset1.TheMask=numpy.logical_or(TheDataset1.TheMask,TheDataset2.TheMask)
+			TheDataset2.TheMask=numpy.copy(TheDataset1.TheMask)
+		
+		else: # Only TheDataset1 has a mask
+			TheDataset2.TheMask=numpy.copy(TheDataset1.TheMask)
+	
+	elif (TheDataset2.TheMask is not None):
+		TheDataset1.TheMask=numpy.copy(TheDataset2.TheMask)
+		
+	#print("Width in pixels: "+format(TheDataset1.GetWidthInPixels())) 
+	#print("Height in pixels: "+format(TheDataset1.GetHeightInPixels())) 
+	
+	#print("Width in pixels: "+format(TheDataset2.GetWidthInPixels())) 
+	#print("Height in pixels: "+format(TheDataset2.GetHeightInPixels())) 
+
+	return(TheDataset1,TheDataset2)

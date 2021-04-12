@@ -1,5 +1,7 @@
 ############################################################################
 # Code to make it easy to plot a variety of spatial data with MatPlotLib.
+# Note that this is not fast and SpaView should be used for faster rendering of spatial data to
+# a window
 #
 # Copyright (C) 2020, Humboldt State University, Jim Graham
 #
@@ -19,7 +21,7 @@
 
 import matplotlib
 from matplotlib import pyplot
-import SpaPy
+from SpaPy import SpaBase
 
 ############################################################################
 # Globals
@@ -45,7 +47,7 @@ class SpaPlot:
 		Returns:
 			none
 		"""
-		Xs,Ys=SpaPy.GetXYsFromCoords(TheCoords)
+		Xs,Ys=SpaBase.GetXYsFromCoords(TheCoords)
 		
 		if (len(Xs)>2):
 			matplotlib.pyplot.plot(Xs,Ys, color='#000000', alpha=0.7,linewidth=1, solid_capstyle='round', zorder=2)
@@ -122,3 +124,42 @@ class SpaPlot:
 		"""
 		matplotlib.pyplot.show()		
 
+def PlotRasterHistogram(TheRasterDataset,Title=None):
+	"""
+	Example showing how to plot the histgram for a raster
+	
+	Parameters:
+		TheRasterDataset
+	"""
+	import matplotlib.pyplot as plt
+	
+	# Get the histogram and bin edges from the raster dataset
+	Histogram=TheRasterDataset.GetHistogram()
+	#print("HistogramAndBinEdges="+format(HistogramAndBinEdges))
+	
+	# Setup the arrays for displaying the histogram
+	BarCenters = []
+	Labels=[]
+	Min,Max=TheRasterDataset.GetMinMax()
+	
+	NumBins=len(Histogram)
+	BinWidth=(Max-Min)/NumBins
+	
+	Index=0
+	while (Index<NumBins):
+		BarCenter=Min+Index*BinWidth+BinWidth/2
+		Labels.append(format(BarCenter,"6.0f"))
+		
+		BarCenters.append(Index)
+		Index+=1
+	
+	# Setup and show the plot
+	plt.bar(BarCenters,Histogram,tick_label=Labels, align='center')
+	plt.xlabel("Bins")
+	plt.ylabel("Number of Pixels")
+	
+	if (Title==None): Title="Raster Histogram"
+	
+	plt.title(Title)
+	
+	plt.show()	

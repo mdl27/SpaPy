@@ -3,7 +3,7 @@
 # based raster images.  This class has functions that allow rendering in
 # either pixel or reference units.
 #
-# This class still needs some work
+# This class is under construction.
 #
 # Note: the name of this file, SpaView, does not really match its function
 # at this time because the class renders to an image that can be displayed
@@ -38,8 +38,10 @@ import numpy
 from PIL import Image, ImageDraw,ImageTk 
 
 # SpaPy libraries
-import SpaPy
-import SpaRasters
+#import SpaPy
+from SpaPy import SpaRasters
+from SpaPy import SpaVectors
+from SpaPy import SpaBase
 
 ############################################################################
 # Globals
@@ -333,6 +335,8 @@ class SpaView():
 		CenterX=self.GetPixelXFromRefX(RefX1)
 		CenterY=self.GetPixelYFromRefY(RefY1)
 		
+		if (Height==None): Height=Width
+		
 		X1=CenterX-Width/2
 		Y1=CenterY-Height/2
 		X2=X1+Width
@@ -412,7 +416,7 @@ class SpaView():
 			#raise	
 
 	def RenderRefCoords(self,TheCoords,Closed=True):
-		Xs,Ys=SpaPy.GetXYsFromCoords(TheCoords)
+		Xs,Ys=SpaBase.GetXYsFromCoords(TheCoords)
 
 		if (len(Xs)>2):
 			self.RenderRefPolygonFromArrays(Xs,Ys,Closed)
@@ -428,14 +432,16 @@ class SpaView():
 			self.RenderRefCoords(Coords,True)
 
 	def RenderRefGeometry(self,TheGeometry):
-		""" Render the specified geomery into the specified view.  This is called by Render() """
+		""" 
+		Render the specified geomery into the specified view.  This is called by Render() 
+		"""
 
 		if (TheGeometry!=None):
 			# take the appropriate action based on the type of geometry
 			TheType=TheGeometry.geom_type
 			if (TheType=="Point"):
 				TheCoords=TheGeometry.coords
-				self.RenderRefEllipse(TheCoords[0],TheCoords[1],Width=4) # this is really done by the layer
+				self.RenderRefEllipse(TheGeometry.x,TheGeometry.y,Width=4) # this is really done by the layer
 			elif (TheType=="Polygon"):
 				self.RenderRefPolygon(TheGeometry)
 			elif (TheType=="MultiPolygon"):
@@ -512,9 +518,10 @@ class SpaView():
 		TheBand=TheBands[0]
 		
 		if (Stretch):
-			Min=numpy.amin(TheBand)
+			Min,Max=TheRasterDataset.GetMinMax(0)
+	#		Min=numpy.amin(TheBand)
 			
-			Max=numpy.amax(TheBand)
+		#	Max=numpy.amax(TheBand)
 			super_threshold_indices = TheBand<0.00000001
 			TheBand[super_threshold_indices] = 0
 			Min=numpy.amin(TheBand)
@@ -538,6 +545,28 @@ class SpaView():
 		PixelYMax=PixelYMin+HeightInPixels
 		
 		TheImage.paste(TheRasterImage, (PixelXMin, PixelYMin, PixelXMax,PixelYMax))
+					
+	############################################################################
+	# Functions to Render rasters into a view
+	############################################################################
+	def RenderVectors(self,TheDataset):
+		
+		########################################################################
+		# Crop the raster to the vewing area if needed
+		TheBounds=TheDataset.GetBounds() # upper left, lower right (XMin,YMax,XMax,YMin)
+		
+		TheViewBounds=self.GetBounds()
+		
+		Index=0
+		NumFeatures=TheDataset.GetNumFeatures()
+		while (Index<NumFeatures):
+			
+			TheGeometry=TheDataset.GetGeometry(Index)
+			
+			self.RenderRefGeometry(TheGeometry)
+				
+			Index+=1
+			
 					
 	############################################################################
 	# Functions to access and save the image.
@@ -569,14 +598,30 @@ class SpaView():
 ############################################################################
 def Show(TheDataset,width=800,height=800):
 	
+	# IF a file path is specified, load the dataset
 	if (type(TheDataset) is str):
-		TheDataset=SpaRasters.Load(TheDataset)
+		filename, file_extension = os.path.splitext(TheDataset)
+		file_extension=file_extension.lower()
 		
+		if (file_extension==".shp"):
+			TheDataset=SpaVectors.Load(TheDataset) # load the contents of the layer
+		else:
+			TheDataset=SpaRasters.Load(TheDataset)
+		
+	# Create the view
 	TheView=SpaView(width,height)
 	
+	# Set the bounds of the view to match the dataset
 	TheBounds=TheDataset.GetBounds()
 	TheView.SetBounds(TheBounds)
 	
-	TheView.RenderRaster(TheDataset)
+	# Render the dataset into the view
+	if (isinstance(TheDataset, SpaRasters.SpaDatasetRaster)):
+		
+		TheView.RenderRaster(TheDataset)
+		
+	elif (isinstance(TheDataset, SpaVectors.SpaDatasetVector)):
+		TheView.RenderVectors(TheDataset)
+		
 	TheView.Show()
 	

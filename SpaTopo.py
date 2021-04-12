@@ -25,20 +25,24 @@ import math
 # Open source spatial libraries
 import numpy
 import scipy
-import ogr
+from osgeo import ogr
 import scipy.ndimage
 from osgeo import osr
-import gdal
+from osgeo import gdal
 
 # SpaPy libraries
-import SpaPy
-import SpaRasters
-import SpaRasterMath
+
+from SpaPy import SpaRasters
+from SpaPy import SpaBase
+
+###############################################################################
+# Global definitions
+###############################################################################
 
 ###############################################################################
 # Class definition
 ###############################################################################
-class SpaTopoTools(SpaPy.SpaTransform):
+class SpaTopoTools(SpaBase.SpaTransform):
 	#adapted from https://www.neonscience.org/create-hillshade-py
 	def __init__(self):
 		super().__init__()
@@ -75,61 +79,72 @@ class SpaTopoTools(SpaPy.SpaTransform):
 		NewDataset.TheBands=[shaded]
 		return(NewDataset)
 
-	def Slope(self,Input1):
-		"""
-		Creates a slope layer from a digital elevation model by calculating the steepness of each cell
-		(returns with a value between 0-90 degrees)
+	#def Slope(self,Input1,OutputFilePath=None):
+		#"""
+		#Creates a slope layer from a digital elevation model by calculating the steepness of each cell
+		#(returns with a value between 0-90 degrees)
 
-		Parameters:
-			Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		#Parameters:
+			#Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
 
-		Return:
-			A SpaDatasetRaster object depicting slope
-		"""
+		#Return:
+			#A SpaDatasetRaster object depicting slope
+		#"""
 
-		NewDataset=SpaRasters.SpaDatasetRaster()
-		NewDataset.CopyPropertiesButNotData(Input1)
-
-		GDALDataset = Input1.GDALDataset
-		#GDALDataset = gdal.DEMProcessing('', GDALDataset, format="MEM", projWin = Bounds)
-		gdal.DEMProcessing("./Examples/Temp/Test.tif", GDALDataset, 'slope')
-		NewDataset.Load("./Examples/Temp/Test.tif")
-
-		#TheBand=Input1.TheBands[0]
-		#x,y = numpy.gradient(TheBand)
-		#slope=numpy.pi/2. - numpy.arctan(numpy.sqrt(x*x +y*y))
-
-		#NewDataset.TheBands = [slope]
-		return(NewDataset)
-
-	def Aspect(self,Input1):
-		"""
-		Creates an aspect layer from a digital elevation model by identifing the compass
-		direction that the downhill slope faces for each location (returns with a value between 0-360 degrees)
-
-
-		Parameters:
-			Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
-
-		Return:
-			A SpaDatasetRaster object depicting aspect	
-		"""
-
-		NewDataset=SpaRasters.SpaDatasetRaster()
-		NewDataset.CopyPropertiesButNotData(Input1)
-
-		GDALDataset = Input1.GDALDataset
-		#GDALDataset = gdal.DEMProcessing('', GDALDataset, format="MEM", projWin = Bounds)
-		gdal.DEMProcessing("./Examples/Temp/Test.tif", GDALDataset, 'aspect')
-		NewDataset.Load("./Examples/Temp/Test.tif")
-		#TheBand=Input1.TheBands[0]
-		#x,y = numpy.gradient(TheBand)
-		#aspect = numpy.arctan2(-x, y)
-		#NewDataset.TheBands=[aspect]
+		#NewDataset=None
 		
-		return(NewDataset)
+		## if a file path is specified, use it.  Otherwise, use the regular TempFilePath
+		#TempFilePath=GetTempFolderPath()+"Test.tif"
+		#if (OutputFilePath!=None): TempFilePath=OutputFilePath
+		
+		#GDALDataset = Input1.GDALDataset
+		##GDALDataset = gdal.DEMProcessing('', GDALDataset, format="MEM", projWin = Bounds)
+		#gdal.DEMProcessing(TempFilePath, GDALDataset, 'slope')
+		
+		#if (OutputFilePath==None): 
+			#NewDataset=SpaRasters.SpaDatasetRaster()
+			#NewDataset.Load(TempFilePath)
+
+		##TheBand=Input1.TheBands[0]
+		##x,y = numpy.gradient(TheBand)
+		##slope=numpy.pi/2. - numpy.arctan(numpy.sqrt(x*x +y*y))
+
+		#return(NewDataset)
+
+	#def Aspect(self,Input1):
+		#"""
+		#Creates an aspect layer from a digital elevation model by identifing the compass
+		#direction that the downhill slope faces for each location (returns with a value between 0-360 degrees)
+
+		#Parameters:
+			#Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+
+		#Return:
+			#A SpaDatasetRaster object depicting aspect	
+		#"""
+
+		#NewDataset=None
+		
+		## if a file path is specified, use it.  Otherwise, use the regular TempFilePath
+		#TempFilePath=GetTempFolderPath()+"Test.tif"
+		#if (OutputFilePath!=None): TempFilePath=OutputFilePath
+		
+		#GDALDataset = Input1.GDALDataset
+		##GDALDataset = gdal.DEMProcessing('', GDALDataset, format="MEM", projWin = Bounds)
+		#gdal.DEMProcessing(TempFilePath, GDALDataset, 'aspect')
+		
+		#if (OutputFilePath==None): 
+			#NewDataset=SpaRasters.SpaDatasetRaster()
+			#NewDataset.Load(TempFilePath)
+			
+		##TheBand=Input1.TheBands[0]
+		##x,y = numpy.gradient(TheBand)
+		##aspect = numpy.arctan2(-x, y)
+		##NewDataset.TheBands=[aspect]
+		
+		#return(NewDataset)
 	
-	def gdaldem(self,Input1,Operation):
+	def gdaldem(self,Input1,Operation,OutputFilePath):
 		
 		"""
 		Creates an aspect layer from a digital elevation model by identifing the compass
@@ -138,20 +153,32 @@ class SpaTopoTools(SpaPy.SpaTransform):
 
 		Parameters:
 			Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
-
+			OutputFilePath: A file path for the output raster
+			
 		Return:
 			A SpaDatasetRaster object depicting aspect	
 		"""
-		Input1=SpaPy.GetInput(Input1)
+		Input1=SpaBase.GetInput(Input1)
 		
-		NewDataset=SpaRasters.SpaDatasetRaster()
-		NewDataset.CopyPropertiesButNotData(Input1)
-
+		NewDataset=None
+		
+		# if a file path is specified, use it.  Otherwise, use the regular TempFilePath
+		TempFilePath=None
+		if (OutputFilePath==None): 
+			TempFilePath=SpaBase.GetTempFolderPath()
+			if not os.path.exists(TempFilePath): os.makedirs(TempFilePath)
+			TempFilePath+="Test.tif"
+		else:
+			TempFilePath=OutputFilePath
+		
 		GDALDataset1 = Input1.GDALDataset
-		gdal.DEMProcessing("./Examples/Temp/Test.tif", GDALDataset1, Operation)
-		NewDataset.Load("./Examples/Temp/Test.tif")
-		NewDataset.NoDataValue=-9999
+		gdal.DEMProcessing(TempFilePath, GDALDataset1, Operation)
 		
+		if (OutputFilePath==None): 
+			NewDataset=SpaRasters.SpaDatasetRaster()
+			NewDataset.Load(TempFilePath)
+			NewDataset.NoDataValue=-9999
+			
 		return(NewDataset)
 
 	
@@ -166,7 +193,7 @@ class SpaTopoTools(SpaPy.SpaTransform):
 		Return:
 			A SpaDatasetRaster object depicting aspect	
 		"""
-		Input1=SpaPy.GetInput(Input1)
+		Input1=SpaBase.GetInput(Input1)
 		
 		NewDataset=SpaRasters.SpaDatasetRaster()
 		NewDataset.CopyPropertiesButNotData(Input1)
@@ -180,6 +207,17 @@ class SpaTopoTools(SpaPy.SpaTransform):
 		TheBand = Input1.GDALDataset.GetRasterBand(1)
 		
 		#Generate layer to save Contourlines in
+		#TheDataset=SpaVectors.SpaDatasetVector() #create a new layer
+		
+		## add a square geometry in at 0,0
+		
+		#TheDataset.AddAttribute("ID","int")
+		#TheDataset.AddAttribute("elev","float")
+		
+		## Save the result
+		#TheDataset.Save(OutputFolderPath+"NewBox.shp") 
+
+		
 		ogr_ds = ogr.GetDriverByName("ESRI Shapefile").CreateDataSource(OutputFilePath)
 		contour_shp = ogr_ds.CreateLayer('contour')
 	
@@ -190,6 +228,7 @@ class SpaTopoTools(SpaPy.SpaTransform):
 
 		#ContourGenerate(Band srcBand, double contourInterval, double contourBase, int fixedLevelCount, int useNoData, double noDataValue, Layer dstLayer, int idField, int elevField, GDALProgressFunc callback=0, void * callback_data=None)
 		gdal.ContourGenerate(TheBand, ContourInterval, contourBase, [], UseNoData,NoDataValue, contour_shp, 0, 1)
+		ogr_ds = None
 		
 		return(NewDataset)
 
@@ -203,59 +242,126 @@ def Hillshade(Input1):
 
 	Parameters:
 		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
-
+		
 	Return:
 		A SpaDatasetRaster object
 	"""
 
-	Input1=SpaPy.GetInput(Input1)
+	Input1=SpaBase.GetInput(Input1)
 	TheTopoTools=SpaTopoTools()
 	return(TheTopoTools.Hillshade(Input1))
 
-def Slope(Input1):
+def Slope(Input1,OutputFilePath=None):
 	"""
 	Creates a slope layer from a digital elevation model by calculating the steepness of each cell
 	(returns with a value between 0-90 degrees)
 
 	Parameters:
-	Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
-
+		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		OutputFilePath: A file path for the output raster
+		
 	Return:
-	A SpaDatasetRaster object depicting slope
+		A SpaDatasetRaster object depicting slope
 	"""
-
-	Input1=SpaPy.GetInput(Input1)
 	TheTopoTools=SpaTopoTools()
-	return(TheTopoTools.Slope(Input1))
+	TheResult=TheTopoTools.gdaldem(Input1,"slope",OutputFilePath)
+	return(TheResult)
+
+	#Input1=SpaBase.GetInput(Input1)
+	#TheTopoTools=SpaTopoTools()
+	#return(TheTopoTools.Slope(Input1))
 
 
-def Aspect(Input1):
+def Aspect(Input1,OutputFilePath=None):
 	"""
 	Creates an aspect layer from a digital elevation model by identifing the compass
 	direction that the downhill slope faces for each location (returns with a value between 0-360 degrees)
 
 	Parameters:
 		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		OutputFilePath: A file path for the output raster
 
 	Return:
 		A SpaDatasetRaster object depicting aspect	
 	"""	
-	Input1=SpaPy.GetInput(Input1)
 	TheTopoTools=SpaTopoTools()
-	return(TheTopoTools.Aspect(Input1))
+	TheResult=TheTopoTools.gdaldem(Input1,"aspect",OutputFilePath)
+	return(TheResult)
+	#Input1=SpaBase.GetInput(Input1)
+	#TheTopoTools=SpaTopoTools()
+	#return(TheTopoTools.Aspect(Input1))
 
-def TRI(Input1):
+def TRI(Input1,OutputFilePath=None):
+	"""
+	Computes a Terrain Roughness Index (TRI) raster from a DEM
+
+	Parameters:
+		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		OutputFilePath: A file path for the output raster
+
+	Return:
+		A SpaDatasetRaster object depicting aspect	
+	"""	
 	TheTopoTools=SpaTopoTools()
-	TheResult=TheTopoTools.gdaldem(Input1,"TRI")
+	TheResult=TheTopoTools.gdaldem(Input1,"TRI",OutputFilePath)
 	return(TheResult)
 
-def TPI(Input1):
+def TPI(Input1,OutputFilePath=None):
+	"""
+	Computes a Topographic Position Index (TPI) raster from a DEM
+
+	Parameters:
+		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		OutputFilePath: A file path for the output raster
+
+	Return:
+		A SpaDatasetRaster object depicting aspect	
+	"""	
 	TheTopoTools=SpaTopoTools()
-	TheResult=TheTopoTools.gdaldem(Input1,"TPI")
+	TheResult=TheTopoTools.gdaldem(Input1,"TPI",OutputFilePath)
 	return(TheResult)
 
-def Roughness(Input1):
+def Roughness(Input1,OutputFilePath=None):
+	"""
+	Computes a Roughness raster from a DEM
+
+	Parameters:
+		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		OutputFilePath: A file path for the output raster
+
+	Return:
+		A SpaDatasetRaster object depicting aspect	
+	"""	
 	TheTopoTools=SpaTopoTools()
-	TheResult=TheTopoTools.gdaldem(Input1,"roughness")
+	TheResult=TheTopoTools.gdaldem(Input1,"roughness",OutputFilePath)
 	return(TheResult)
-	
+
+def Contour(Input1,ContourInterval=100,contourBase=0,OutputFilePath=None):
+	"""
+	Creates a shapefile with contour lines from a DEM.
+
+	Parameters:
+		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		OutputFilePath: A file path for the output raster
+
+	Return:
+		A SpaDatasetRaster object depicting aspect	
+	"""	
+	TheTopoTools=SpaTopoTools()
+	TheResult=TheTopoTools.Contour(Input1,ContourInterval,contourBase,OutputFilePath)
+	return(TheResult)
+
+def ColorRelief(Input1,OutputFilePath=None):
+	"""
+	Creates a color relief raster from a DEM.
+
+	Parameters:
+		Input1: An SpaDatasetRaster object OR a string representing the path to the raster file
+		OutputFilePath: A file path for the output raster
+
+	Return:
+		A SpaDatasetRaster object depicting aspect	
+	"""	
+	TheTopoTools=SpaTopoTools()
+	TheResult=TheTopoTools.gdaldem(Input1,"color-relief",OutputFilePath)
+	return(TheResult)
