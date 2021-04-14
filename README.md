@@ -12,6 +12,10 @@ cd spapy
 
 python -m venv venv
 
-venv\Scripts\activate.bat
+.\venv\Scripts\activate.bat
+
+mkdir .\venv\Lib\site-packages\SpaPy
+
+copy Spa*.py .\venv\Lib\site-packages\SpaPy
 
 pip install -r requirements.txt

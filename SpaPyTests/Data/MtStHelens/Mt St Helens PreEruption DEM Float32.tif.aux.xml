@@ -1,0 +1,16 @@
+<PAMDataset>
+  <Metadata>
+    <MDI key="COMPRESS">NONE</MDI>
+    <MDI key="JPEG_QUALITY">75</MDI>
+    <MDI key="PHOTOMETRIC">MINISBLACK</MDI>
+    <MDI key="PROFILE">GDALGeoTIFF</MDI>
+  </Metadata>
+  <PAMRasterBand band="1">
+    <Metadata>
+      <MDI key="STATISTICS_MAXIMUM">2951</MDI>
+      <MDI key="STATISTICS_MEAN">1276.0602367734</MDI>
+      <MDI key="STATISTICS_MINIMUM">0</MDI>
+      <MDI key="STATISTICS_STDDEV">452.34511616738</MDI>
+    </Metadata>
+  </PAMRasterBand>
+</PAMDataset>

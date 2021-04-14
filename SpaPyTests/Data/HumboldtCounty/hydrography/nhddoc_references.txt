@@ -1,0 +1,32 @@
+Main Site: 
+http://nhd.usgs.gov/
+
+Feature codes (FCODE) by layer:
+http://nhd.usgs.gov/userguide.html
+
+Standards for National Hydrography Dataset
+http://nationalmap.gov/standards/nhdstds.html
+
+Federal Standards and Procedures for the National Watershed BOundary Dataset (WBD)
+http://www.nrcs.usda.gov/Internet/FSE_DOCUMENTS/nrcs143_021581.pdf
+
+NRCS Developed .lyr and .style files and instructions for NHD data layers are located at:
+https://nrcs.app.box.com/v/gateway/folder/40057621887
+
+Download: 
+ftp://rockyftp.cr.usgs.gov/vdelivery/Datasets/Staged/Hydro/State/HighResolution/ (1:24K or better scale)
+
+Model structure: 
+http://nhd.usgs.gov/NHDv2.2_poster_062614.pdf
+
+NHD Data Dictionary provides details on all feature classes and attribute tables 
+http://nhd.usgs.gov/userguide.html
+
+User Guide: 
+http://nhd.usgs.gov/userguide.html
+
+Quick Start - Utility Network Analyst: 
+http://nhd.usgs.gov/NHD_Quickstart_Feb_09.pdf
+
+Using the NDHFlowline and NHDFlowlineVAA tables: 
+http://megug.org/wp-content/uploads/2010/04/introduction_to_NHD2010_SOM_External.pdf
