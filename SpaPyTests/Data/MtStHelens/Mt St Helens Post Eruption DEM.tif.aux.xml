@@ -1,0 +1,20 @@
+<PAMDataset>
+  <Metadata>
+    <MDI key="DataType">Generic</MDI>
+  </Metadata>
+  <Metadata domain="Esri">
+    <MDI key="PyramidResamplingType">AVERAGE</MDI>
+  </Metadata>
+  <PAMRasterBand band="1">
+    <Metadata>
+      <MDI key="RepresentationType">ATHEMATIC</MDI>
+      <MDI key="STATISTICS_COVARIANCES">131097.8929209599</MDI>
+      <MDI key="STATISTICS_MAXIMUM">2543</MDI>
+      <MDI key="STATISTICS_MEAN">1293.2997951439</MDI>
+      <MDI key="STATISTICS_MINIMUM">683</MDI>
+      <MDI key="STATISTICS_SKIPFACTORX">1</MDI>
+      <MDI key="STATISTICS_SKIPFACTORY">1</MDI>
+      <MDI key="STATISTICS_STDDEV">362.07321412902</MDI>
+    </Metadata>
+  </PAMRasterBand>
+</PAMDataset>

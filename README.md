@@ -10,6 +10,8 @@ git clone https://github.com/mdl27/SpaPy --branch SpaPy-whl
 
 cd spapy
 
-pip install wheel setuptools # in case they're not installed already
+# in case wheel and setuptools are not installed already
+pip install wheel setuptools
 
-python setup.py bdist_wheel --universal # creates the SpaPy whl file
+# creates the SpaPy whl file
+python setup.py bdist_wheel

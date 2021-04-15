@@ -68,4 +68,3 @@ SpaView.Show(TheDataset)
 
 # Show a vector shapefile
 #SpaView.Show(CountriesFilePath)
-
